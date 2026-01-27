@@ -7,8 +7,11 @@ Avoid using this README file for information that is maintained or published els
 
 Use links instead.
 -->
+
+[license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
+
 # MediaWiki K8s Operator
-<!-- Use this space for badges -->
+[![License][license-image]](LICENSE)
 
 A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/) deploying and managing MediaWiki on Kubernetes. [MediaWiki](https://www.mediawiki.org) is a free and open-source wiki software platform.
 
@@ -67,3 +70,7 @@ include a link to the relevant Matrix channel.
 ## Project and community
 * [Issues]() <!--Link to GitHub issues (if applicable)-->
 * [Contributing](CONTRIBUTING.md) <!--Link to any contribution guides, preferably for the source code-->
+
+## Licensing and trademark
+
+MediaWiki and the MediaWiki logo is a trademark of the Wikimedia Foundation and is used with the permission of the Wikimedia Foundation. We are not endorsed by or affiliated with the Wikimedia Foundation.
