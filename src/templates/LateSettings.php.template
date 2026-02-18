@@ -1,0 +1,14 @@
+<?php
+// Copyright 2026 Canonical Ltd.
+// See LICENSE file for licensing details.
+
+# This file is managed by Juju. Do not make local changes.
+
+# Protect against web entry
+if ( !defined( 'MEDIAWIKI' ) ) {
+	exit;
+}
+
+$wgImageMagickConvertCommand = "/usr/bin/convert";
+$wgDiff3 = "/usr/bin/diff3";
+$wgInternalServer = "http://127.0.0.1";
