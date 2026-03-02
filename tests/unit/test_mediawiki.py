@@ -13,7 +13,7 @@ from pytest_mock import MockerFixture, MockType
 import database
 from charm import Charm
 from exceptions import MediaWikiInstallError
-from mediawiki import MediaWiki
+from mediawiki import MediaWiki, MediaWikiSecrets
 from state import CharmConfigInvalidError, StatefulCharmBase
 from tests.unit.conftest import ExecCmd
 from types_ import DatabaseConfig, DatabaseEndpoint
@@ -68,7 +68,7 @@ class TestReconciliation:
     def test_initial(self, ctx: testing.Context, active_state: testing.State, meta: dict) -> None:
         """Test that reconciliation runs successfully as a leader unit with required relations."""
         with ctx(ctx.on.update_status(), active_state) as mgr:
-            mgr.charm.mediawiki.reconciliation()
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
 
             state_out = mgr.run()
 
@@ -90,7 +90,7 @@ class TestReconciliation:
     ) -> None:
         """Test that reconciliation runs successfully with a valid config."""
         with ctx(ctx.on.update_status(), configured_state) as mgr:
-            mgr.charm.mediawiki.reconciliation()
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
 
             state_out = mgr.run()
 
@@ -119,7 +119,7 @@ class TestReconciliation:
             ctx(ctx.on.update_status(), state_in) as mgr,
             pytest.raises(CharmConfigInvalidError, match="Invalid charm configuration"),
         ):
-            mgr.charm.mediawiki.reconciliation()
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
 
     def test_initial_not_leader(
         self,
@@ -133,7 +133,7 @@ class TestReconciliation:
 
         state_in = dataclasses.replace(active_state, leader=False)
         with ctx(ctx.on.update_status(), state_in) as mgr:
-            mgr.charm.mediawiki.reconciliation()
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
 
             state_out = mgr.run()
 
@@ -157,7 +157,7 @@ class TestReconciliation:
         monkeypatch.setenv("JUJU_CHARM_NO_PROXY", no_proxy)
 
         with ctx(ctx.on.update_status(), configured_state) as mgr:
-            mgr.charm.mediawiki.reconciliation()
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
 
         found_one = False
         for exec_event in ctx.exec_history[Charm._CONTAINER_NAME]:
@@ -291,6 +291,45 @@ class TestGetVersion:
             )
 
             mock_get.assert_called_once()
+
+
+class TestMediaWikiSecrets:
+    def test_generate_returns_instance(self) -> None:
+        """Test that generate() returns a MediaWikiSecrets instance."""
+        result = MediaWikiSecrets.generate()
+        assert isinstance(result, MediaWikiSecrets)
+
+    def test_generate_fields_are_nonempty_strings(self) -> None:
+        """Test that generated secrets are non-empty strings."""
+        result = MediaWikiSecrets.generate()
+        assert isinstance(result.secret_key, str) and len(result.secret_key) > 0
+        assert isinstance(result.session_secret, str) and len(result.session_secret) > 0
+
+    def test_generate_fields_have_sufficient_entropy(self) -> None:
+        """Test that generated secrets are long enough to be considered secure."""
+        result = MediaWikiSecrets.generate()
+        # token_urlsafe(64) produces at least 64 bytes of entropy
+        assert len(result.secret_key) >= 64
+        assert len(result.session_secret) >= 64
+
+    def test_generate_fields_differ_from_each_other(self) -> None:
+        """Test that secret_key and session_secret are not the same value."""
+        result = MediaWikiSecrets.generate()
+        assert result.secret_key != result.session_secret
+
+    def test_generate_produces_unique_secrets_on_each_call(self) -> None:
+        """Test that two calls to generate() return different values."""
+        first = MediaWikiSecrets.generate()
+        second = MediaWikiSecrets.generate()
+        assert first.secret_key != second.secret_key
+        assert first.session_secret != second.session_secret
+
+    def test_to_local_settings_values_match_fields(self) -> None:
+        """Test that to_local_settings() values correspond to the dataclass fields."""
+        result = MediaWikiSecrets(secret_key="test-key", session_secret="test-session")  # nosec: B106
+        settings = result.to_local_settings()
+        assert settings["$wgSecretKey"] == "test-key"
+        assert settings["$wgSessionSecret"] == "test-session"
 
 
 def validate_container(

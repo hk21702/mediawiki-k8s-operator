@@ -1,6 +1,7 @@
 # Copyright 2026 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import copy
 import dataclasses
 
 import ops
@@ -9,6 +10,7 @@ import scenario  # testing.Container isn't namespaced correctly, so we import sc
 from ops import testing
 from pytest_mock import MockerFixture, MockType
 
+from charm import Charm
 from exceptions import MediaWikiBlockedStatusException, MediaWikiInstallError
 
 
@@ -40,29 +42,76 @@ class TestGeneralEvents:
 
 class TestPebbleReadyEvent:
     def test_can_connect(
-        self, ctx: testing.Context, mediawiki_container: scenario.Container
+        self,
+        ctx: testing.Context,
+        base_state: testing.State,
+        mediawiki_container: scenario.Container,
     ) -> None:
-        """Test that the charm sets blocked status when pebble can connect but no relations."""
-        state_in = testing.State(
-            containers=[mediawiki_container],
-            leader=True,
-        )
-
-        state_out = ctx.run(ctx.on.pebble_ready(container=mediawiki_container), state_in)
+        """Test that the charm sets the correct status when pebble can connect, but no relations."""
+        # With replica secret data
+        state_out = ctx.run(ctx.on.pebble_ready(container=mediawiki_container), base_state)
         assert isinstance(state_out.unit_status, ops.BlockedStatus)
 
+        # Without replica secret data
+        state_in = dataclasses.replace(base_state, secrets=[])
+        state_out = ctx.run(ctx.on.pebble_ready(container=mediawiki_container), state_in)
+        assert isinstance(state_out.unit_status, ops.WaitingStatus)
+
     def test_cannot_connect(
-        self, ctx: testing.Context, mediawiki_container: scenario.Container
+        self,
+        ctx: testing.Context,
+        mediawiki_container: scenario.Container,
+        secrets: list[testing.Secret],
     ) -> None:
         """Test that the charm sets waiting status when pebble cannot connect."""
         mediawiki_container = dataclasses.replace(mediawiki_container, can_connect=False)
+
+        # With replica secrets
         state_in = testing.State(
             containers=[mediawiki_container],
+            secrets=secrets,
             leader=True,
         )
 
         state_out = ctx.run(ctx.on.pebble_ready(container=mediawiki_container), state_in)
         assert isinstance(state_out.unit_status, ops.WaitingStatus)
+
+        # Without replica secrets
+        state_in = dataclasses.replace(state_in, secrets=[])
+        state_out = ctx.run(ctx.on.pebble_ready(container=mediawiki_container), state_in)
+        assert isinstance(state_out.unit_status, ops.WaitingStatus)
+
+
+class TestLeaderElectedEvent:
+    @pytest.fixture
+    def state(self, base_state: testing.State) -> testing.State:
+        """Provides a base state with no secrets."""
+        return dataclasses.replace(base_state, secrets=[])
+
+    def test_leader_elected(self, ctx: testing.Context, state: testing.State) -> None:
+        """Test that the charm sets up replica data when leader is elected."""
+        state_out = ctx.run(ctx.on.leader_elected(), state)
+        assert state_out.get_secret(label=Charm._REPLICA_SECRET_LABEL) is not None
+
+    def test_leader_elected_not_leader(self, ctx: testing.Context, state: testing.State) -> None:
+        """Test that the charm does not set up replica data when leader is elected but unit is not leader."""
+        state_in = dataclasses.replace(state, leader=False)
+        state_out = ctx.run(ctx.on.leader_elected(), state_in)
+        with pytest.raises(KeyError, match="secret: not found in the State"):
+            state_out.get_secret(label=Charm._REPLICA_SECRET_LABEL)
+
+    def test_leader_elected_with_consensus(
+        self, ctx: testing.Context, base_state: testing.State
+    ) -> None:
+        """Test that the charm does not set up replica data when leader is elected but replica consensus has already been reached."""
+        expected_secret = copy.deepcopy(
+            base_state.get_secret(label=Charm._REPLICA_SECRET_LABEL).latest_content
+        )
+        state_out = ctx.run(ctx.on.leader_elected(), base_state)
+        assert (
+            state_out.get_secret(label=Charm._REPLICA_SECRET_LABEL).latest_content
+            == expected_secret
+        )
 
 
 class TestConfigChangedEvent:

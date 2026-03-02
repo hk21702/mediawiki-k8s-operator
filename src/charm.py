@@ -17,6 +17,7 @@ from ops import (
     BlockedStatus,
     EventBase,
     MaintenanceStatus,
+    SecretNotFoundError,
     WaitingStatus,
     pebble,
 )
@@ -24,11 +25,12 @@ from ops import (
 from database import Database
 from exceptions import (
     CharmConfigInvalidError,
+    MediaWikiBlockedStatusException,
     MediaWikiInstallError,
     MediaWikiStatusException,
     MediaWikiWaitingStatusException,
 )
-from mediawiki import MediaWiki
+from mediawiki import MediaWiki, MediaWikiSecrets
 from state import StatefulCharmBase
 
 # Log messages can be retrieved using juju debug-log
@@ -46,12 +48,15 @@ class Charm(StatefulCharmBase):
 
     _INGRESS_RELATION_NAME = "traefik-route"
 
+    _REPLICA_SECRET_LABEL = "replica-secret"  # nosec: B105
+
     def __init__(self, *args: typing.Any):
         super().__init__(*args)
 
         self._database = Database(self, self._DATABASE_RELATION_NAME, self._DATABASE_NAME)
         self._mediawiki = MediaWiki(self, self._database)
 
+        self.framework.observe(self.on.leader_elected, self._setup_replica_data)
         self.framework.observe(self.on.mediawiki_pebble_ready, self._reconciliation)
         self.framework.observe(self._database.db.on.database_created, self._reconciliation)
         self.framework.observe(self._database.db.on.endpoints_changed, self._reconciliation)
@@ -62,6 +67,7 @@ class Charm(StatefulCharmBase):
         self.framework.observe(self.on.traefik_route_relation_changed, self._reconciliation)
         self.framework.observe(self.on.traefik_route_relation_broken, self._reconciliation)
         self.framework.observe(self.on.config_changed, self._reconciliation)
+        self.framework.observe(self.on.secret_changed, self._reconciliation)
 
         self.framework.observe(
             self.on.rotate_root_credentials_action, self._on_rotate_root_credentials
@@ -107,6 +113,30 @@ class Charm(StatefulCharmBase):
         }
 
         self._container.add_layer(self._SERVICE_NAME, layer, combine=True)
+
+    def _replica_consensus_reached(self) -> bool:
+        """Check if the necessary minimal data and secrets shared with MediaWiki peers (replicas) has been initialized and synchronized."""
+        try:
+            self.model.get_secret(label=self._REPLICA_SECRET_LABEL)
+        except SecretNotFoundError:
+            return False
+
+        return True
+
+    def _setup_replica_data(self, _event: EventBase) -> None:
+        """Initialize the synchronized data required for MediaWiki replication.
+
+        The relation data content object is used to share (read and write) necessary secret data
+        used by MediaWiki to enhance security and must be synchronized.
+
+        Only the leader can update the data shared with all replicas.
+        """
+        if self._replica_consensus_reached() or not self.unit.is_leader():
+            return
+
+        logger.info("Creating replica data due to event %s", _event)
+        content = MediaWikiSecrets.generate().to_juju_secret()
+        self.app.add_secret(content, label=self._REPLICA_SECRET_LABEL)
 
     def _configure_ingress(self) -> None:
         """Configure the Traefik ingress relation.
@@ -206,21 +236,31 @@ class Charm(StatefulCharmBase):
             self.unit.status = WaitingStatus("Waiting for pebble")
             return
 
-        if not self._database.has_relation():
-            # To prevent the any chance of data getting written unintentionally, we have to check for this case
+        # Early stop service cases
+        try:
+            if not self._replica_consensus_reached():
+                raise MediaWikiWaitingStatusException(
+                    "Replica consensus has not been reached; waiting for leader"
+                )
+            if not self._database.has_relation():
+                # To prevent the any chance of data getting written unintentionally, we have to check for this case
+                raise MediaWikiBlockedStatusException(
+                    f"Waiting for relation {self._DATABASE_RELATION_NAME}"
+                )
+        except MediaWikiStatusException as e:
             logger.info(
-                "Reconciliation process terminated early, relation %s is not alive",
-                self._DATABASE_RELATION_NAME,
+                "Reconciliation process terminated early, stopping service, status exception raised: %s",
+                e,
             )
-            self.unit.status = BlockedStatus(
-                f"Waiting for relation {self._DATABASE_RELATION_NAME}"
-            )
+            self.unit.status = e.status
             self._stop_service()
             return
 
+        secrets = self.model.get_secret(label=self._REPLICA_SECRET_LABEL).get_content(refresh=True)
+
         try:
             self._configure_ingress()
-            self._mediawiki.reconciliation()
+            self._mediawiki.reconciliation(MediaWikiSecrets(**secrets))
             self._start_service()
         except MediaWikiStatusException as e:
             logger.info("Reconciliation process terminated early, status exception raised: %s", e)

@@ -3,6 +3,7 @@
 
 """Functions for managing and interacting with the primary MediaWiki workload."""
 
+import dataclasses
 import functools
 import logging
 import secrets
@@ -82,7 +83,7 @@ class MediaWiki(Object):
         self._php_cli_path = ContainerPath("/usr/bin/php", container=self._container)
         self._maintenance_scripts_base_path = self._mediawiki_path / "maintenance"
 
-    def reconciliation(self) -> None:
+    def reconciliation(self, secrets: "MediaWikiSecrets") -> None:
         """Reconcile the state of MediaWiki installation and configuration.
 
         The following actions are completed here:
@@ -90,6 +91,9 @@ class MediaWiki(Object):
         - Reconcile MediaWiki settings that are part of LocalSettings.php.
         - Reconcile the robots.txt file.
         - Install MediaWiki if the database is not initialized.
+
+        Args:
+            secrets: An instance of MediaWikiSecrets containing secrets synced between units.
 
         Raises:
             MediaWikiStatusException: If there is a potentially transient error stopping the reconciliation process.
@@ -100,7 +104,7 @@ class MediaWiki(Object):
         config = self._charm.load_charm_config()
 
         self._composer_reconciliation(config)
-        self._settings_reconciliation(config)
+        self._settings_reconciliation(config, secrets)
         self._robots_txt_reconciliation(config)
 
         if not self._is_database_initialized():
@@ -153,23 +157,17 @@ class MediaWiki(Object):
         Raises:
             MediaWikiInstallError: If the database update process fails.
         """
-        # Put database into read only mode
-        self._push_late_settings(database_update=True)
-
-        try:
-            result = self._run_maintenance_script(["update"])
-            if result.return_code != 0:
-                logger.error(
-                    "Database schema update failed with return code %s\nstdout: %s\nstderr: %s",
-                    result.return_code,
-                    result.stdout,
-                    result.stderr,
-                )
-                raise MediaWikiInstallError("Database schema update failed; see logs for details.")
-            else:
-                logger.info("Database schema update output:\n%s", result.stdout)
-        finally:
-            self._push_late_settings(database_update=False)
+        result = self._run_maintenance_script(["update"])
+        if result.return_code != 0:
+            logger.error(
+                "Database schema update failed with return code %s\nstdout: %s\nstderr: %s",
+                result.return_code,
+                result.stdout,
+                result.stderr,
+            )
+            raise MediaWikiInstallError("Database schema update failed; see logs for details.")
+        else:
+            logger.info("Database schema update output:\n%s", result.stdout)
 
     def get_version(self) -> str:
         """Fetches the running version of MediaWiki via its API.
@@ -260,25 +258,30 @@ class MediaWiki(Object):
     def _settings_reconciliation(
         self,
         config: CharmConfig,
+        secrets: "MediaWikiSecrets",
     ) -> None:
         """Reconcile all the MediaWiki settings derived from LocalSettings.php.
 
         Args:
             config (CharmConfig): The charm configuration.
+            secrets (MediaWikiSecrets): An instance of MediaWikiSecrets containing secrets synced between units.
         """
         self._secure_settings_base_path.mkdir(exist_ok=True, parents=True)
 
         self._user_settings_file.write_text(
             config.local_settings, mode=0o640, user=self._ROOT_USER_NAME, group=self._DAEMON_GROUP
         )
-        self._push_late_settings()
+        self._push_late_settings(secrets)
         self._push_local_settings(config)
         logger.debug("Settings reconciliation completed successfully.")
 
-    def _push_late_settings(self, database_update: bool = False) -> None:
+    def _push_late_settings(
+        self, secrets: "MediaWikiSecrets", database_update: bool = False
+    ) -> None:
         """Push the charm-controlled late MediaWiki settings to the container.
 
         Args:
+            secrets (MediaWikiSecrets): An instance of MediaWikiSecrets containing secrets synced between units.
             database_update: Whether to include settings that put the database into read-only mode for updates. Defaults to False.
         """
         self._secure_settings_base_path.mkdir(exist_ok=True, parents=True)
@@ -291,6 +294,9 @@ class MediaWiki(Object):
             # Todo: We need to have all units be set to a read-only state, not just where this is running.
             content += "$adminTask = ( PHP_SAPI === 'cli' || defined( 'MEDIAWIKI_INSTALL' ) );\n"
             content += "$wgReadOnly = $adminTask ? false : 'Ongoing database update';\n"
+
+        for key, value in secrets.to_local_settings().items():
+            content += f"{key} = '{utils.escape_php_string(value)}';\n"
 
         content += "?>\n"
 
@@ -605,3 +611,42 @@ class MediaWiki(Object):
                 result.stderr,
             )
         return result
+
+
+@dataclasses.dataclass(frozen=True)
+class MediaWikiSecrets:
+    """A dataclass to hold secrets relevant to MediaWiki that need to be synced between units."""
+
+    secret_key: str
+    session_secret: str
+
+    @classmethod
+    def generate(cls) -> "MediaWikiSecrets":
+        """Returns a new instance of MediaWikiSecrets with randomly generated secrets."""
+        return cls(
+            secret_key=secrets.token_urlsafe(64),
+            session_secret=secrets.token_urlsafe(64),
+        )
+
+    def to_local_settings(self) -> dict[str, str]:
+        """Return the secrets formatted as a dictionary of PHP variable assignments to be included in LateSettings.php."""
+        return {
+            "$wgSecretKey": self.secret_key,
+            "$wgSessionSecret": self.session_secret,
+        }
+
+    def to_juju_secret(self) -> dict[str, str]:
+        """Return the secrets formatted as a dictionary for storing in Juju secrets."""
+        # Juju secrets restricts key names to lowercase alphanumerics and dashes.
+        return {
+            "key": self.secret_key,
+            "session": self.session_secret,
+        }
+
+    @classmethod
+    def from_juju_secret(cls, data: dict[str, str]) -> "MediaWikiSecrets":
+        """Create an instance of MediaWikiSecrets from a Juju secret style dictionary."""
+        return cls(
+            secret_key=data["key"],
+            session_secret=data["session"],
+        )
