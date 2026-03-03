@@ -28,3 +28,8 @@ def pytest_addoption(parser):
         action="store",
         help="temporarily-created model name",
     )
+    parser.addoption(
+        "--mediawiki-image",
+        action="store",
+        help="MediaWiki OCI image built for the MediaWiki charm",
+    )

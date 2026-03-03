@@ -4,7 +4,7 @@
 [project]
 name = "mediawiki-k8s-operator"
 version = "0.0.0"
-description = "MediaWiki is OSS to create a collaborative wiki platform."
+description = "A K8s charm operator for MediaWiki, an OSS collaborative wiki platform."
 readme = "README.md"
 requires-python = ">=3.12"
 classifiers = [
@@ -13,13 +13,19 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
-dependencies = ["ops==3.5.0"]
+dependencies = [
+  "charmlibs-pathops==1.2.0.post0",
+  "mysql-connector-python>=9.6.0",
+  "ops==3.5.2",
+  "pydantic==2.12.5",
+  "requests>=2.32.5",
+]
 
 [dependency-groups]
 fmt = ["ruff"]
 lint = [
   "codespell",
-  "jubilant==1.6.2",
+  "jubilant==1.7.0",
   "mypy",
   "pep8-naming",
   "pytest",
@@ -28,13 +34,13 @@ lint = [
   "types-pyyaml",
   "types-requests",
 ]
-unit = ["coverage[toml]", "ops[testing]", "pytest"]
+unit = ["coverage[toml]", "ops[testing]", "pytest", "pytest-mock"]
 coverage-report = ["coverage[toml]", "pytest"]
 static = ["bandit[toml]"]
 integration = [
   "allure-pytest>=2.8.18",
   "allure-pytest-collection-report @ git+https://github.com/canonical/data-platform-workflows@v24.0.0#subdirectory=python/pytest_plugins/allure_pytest_collection_report",
-  "jubilant==1.6.2",
+  "jubilant==1.7.0",
   "pytest",
 ]
 
@@ -149,3 +155,9 @@ exclude_dirs = ["/venv/"]
 
 [tool.bandit.assert_used]
 skips = ["*/*test.py", "*/test_*.py", "*tests/*.py"]
+
+[tool.pyright]
+include = ["src/**.py", "tests/**.py"]
+extraPaths = ["lib", "./src"]
+ignore = ["lib/charms/data_platform_libs/", "lib/charms/traefik_k8s/"]
+

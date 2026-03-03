@@ -17,12 +17,149 @@ base: ubuntu@24.04
 platforms:
   amd64:
 
+charm-libs:
+  - lib: traefik_k8s.traefik_route
+    version: "0"
+  - lib: data_platform_libs.data_interfaces
+    version: "0"
+
+config:
+  options:
+    composer:
+      description: >
+        The contents of a composer.local.json file to customize MediaWiki extensions and dependencies on top of what is provided by default.
+
+        For example:
+        ```json
+        {
+            "require": {
+                "mediawiki/visual-editor": "dev-REL1_35"
+            }
+        }
+        ```
+
+        See [MediaWiki's documentation](https://www.mediawiki.org/wiki/Composer/For_extensions) for more context on how to configure this.
+      type: string
+
+    robots-txt:
+      description: >
+        The contents of a robots.txt file to be served at the web root of the MediaWiki deployment. This is useful for controlling how search engines index the wiki.
+
+        The default is sensible for the majority of use cases, but it may need to be changed depending on specific requirements or certain settings overrides, such as `$wgArticlePath`.
+      type: string
+      default: |
+        User-agent: *
+        Allow: /w/load.php?
+        Disallow: /w/
+
+        # Allow the Internet Archiver to index action=raw and thereby store the raw wikitext of pages
+        User-agent: ia_archiver
+        Allow: /*&action=raw
+
+    ssh-key:
+      description: >
+        An SSH private key to enable git access for installing MediaWiki extensions as well as fetching static assets from private repositories.
+
+        To be implemented.
+      type: secret
+
+    static-assets-git-repo:
+      description: >
+        The Git repository URL to clone static assets from. This is useful for serving assets such as custom logos and a favicon.
+
+        Supports HTTP(S), SSH, and SCP-style (git@github.com:user/repo.git) URLs.
+
+        The repository will be cloned to `$IP/static` inside the MediaWiki container. 
+
+        For instance, a logo named `my_logo.svg` in the root of the git repository will end up with the path `$IP/static/my_logo.svg`. It is up to the user to configure MediaWiki to use these assets.
+
+        See the MediaWiki documentation page on [$wgLogos](https://www.mediawiki.org/wiki/Manual:$wgLogos) for more information on setting logos. Other static assets can be configured similarly.
+
+        Should a clone operation fail, any existing assets will not be cleared out. To clear out existing assets, set this configuration option to an empty string.
+
+        To be implemented.
+      type: string
+
+    static-assets-git-ref:
+      description: >
+        The Git reference (branch, tag, or commit) to check out after cloning the repository specified by `static-assets-git-repo`.
+
+        If not specified, the default branch of the repository will be used.
+
+        To be implemented.
+      type: string
+
+    hostname:
+      description: >
+        The hostname without a schema prefix to use for the MediaWiki deployment. For example, 'my-wiki.example.com'. This is used for '$wgServer' and configuring ingress.
+
+        If not specified, the charm will fall back to the application name. '$wgServer' may be overridden with the `local-settings` configuration option.
+      type: string
+
+    local-settings:
+      description: >
+        The contents of a LocalSettings.php like file to customize MediaWiki configuration on top of what is provided by default. These settings will be inserted into the base
+        `LocalSettings.php` file used by MediaWiki using `require_once`.
+
+        Certain settings such as secrets and database credentials are restricted and will always be overridden by the charm.
+
+        For example, to set `vector2022` as the default skin:
+        ```php
+        <?php
+        $wgDefaultSkin = 'vector2022';
+        ?>
+        ```
+
+        See [MediaWiki's documentation](https://www.mediawiki.org/wiki/Manual:LocalSettings.php) for more information about LocalSettings.php.
+      type: string
+
+actions:
+  refresh-custom-assets:
+    description: >
+      Force re-fetch custom static assets from the configured Git repository.
+
+      To be implemented.
+
+  rotate-root-credentials:
+    description: >
+      Rotate the MediaWiki root bureaucrat user credentials and return the new credentials.
+
+      This user is only in the bureaucrat group and should only be used to assign permissions to real users, not for regular use.
+
+  rotate-mediawiki-secrets:
+    description: >
+      To be implemented.
+
+  update-database:
+    description: >
+      Update the MediaWiki database schema using the `update.php` maintenance script.
+      This may be required after upgrading MediaWiki or installing extensions that modify the database schema.
+
+      It is highly recommended to back up your database before running this action.
+
+requires:
+  #TODO: Switch to ingress once gateway-api-integrator supports an upstream ingress, or once we can connect to HAProxy more directly.
+  traefik-route:
+    interface: traefik_route
+    limit: 1
+    optional: true
+  database:
+    interface: mysql_client
+    limit: 1
+
+provides: {}
+
+assumes:
+  - k8s-api
+  - juju >= 3.3
+
 parts:
   charm:
     source: .
     plugin: uv
     build-snaps:
       - astral-uv
+
 containers:
   mediawiki:
     resource: mediawiki-image
