@@ -141,6 +141,17 @@ class TestReconciliation:
 
         validate_container(ctx, state_out, meta=meta)
 
+    def test_read_only_database(
+        self, ctx: testing.Context, active_state: testing.State, meta: dict
+    ) -> None:
+        """Test that reconciliation can run successfully with a read-only database."""
+        with ctx(ctx.on.update_status(), active_state) as mgr:
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate(), ro_database=True)
+
+            state_out = mgr.run()
+
+        validate_container(ctx, state_out, meta=meta, expect_read_only_db=True)
+
     def test_initial_with_valid_proxy(
         self,
         ctx: testing.Context,
@@ -337,6 +348,7 @@ def validate_container(
     state_out: testing.State,
     expect_composer: bool = False,
     meta: dict | None = None,
+    expect_read_only_db: bool = False,
 ) -> None:
     """Helper function to validate the container state.
 
@@ -373,3 +385,20 @@ def validate_container(
     assert (container_fs / "etc/mediawiki/UserSettings.php").read_text() == state_out.config.get(
         "local-settings", config.get("local-settings", {}).get("default", "")
     ), "UserSettings.php content does not match config"
+
+    ro_db_settings = [
+        "$adminTask = ( PHP_SAPI === 'cli' || defined( 'MEDIAWIKI_INSTALL' ) );",
+        "$wgReadOnly = $adminTask ? false : 'Ongoing database update';",
+    ]
+
+    if expect_read_only_db:
+        for setting in ro_db_settings:
+            assert setting in (container_fs / "etc/mediawiki/LateSettings.php").read_text(), (
+                f"Expected read-only database setting not found in LateSettings.php: {setting}"
+            )
+    else:
+        late_settings_content = (container_fs / "etc/mediawiki/LateSettings.php").read_text()
+        for setting in ro_db_settings:
+            assert setting not in late_settings_content, (
+                f"Did not expect read-only database setting in LateSettings.php: {setting}"
+            )

@@ -83,7 +83,7 @@ class MediaWiki(Object):
         self._php_cli_path = ContainerPath("/usr/bin/php", container=self._container)
         self._maintenance_scripts_base_path = self._mediawiki_path / "maintenance"
 
-    def reconciliation(self, secrets: "MediaWikiSecrets") -> None:
+    def reconciliation(self, secrets: "MediaWikiSecrets", ro_database: bool = False) -> None:
         """Reconcile the state of MediaWiki installation and configuration.
 
         The following actions are completed here:
@@ -94,6 +94,7 @@ class MediaWiki(Object):
 
         Args:
             secrets: An instance of MediaWikiSecrets containing secrets synced between units.
+            ro_database: Whether to include settings that put the database into read-only mode for updates. Defaults to False.
 
         Raises:
             MediaWikiStatusException: If there is a potentially transient error stopping the reconciliation process.
@@ -104,7 +105,7 @@ class MediaWiki(Object):
         config = self._charm.load_charm_config()
 
         self._composer_reconciliation(config)
-        self._settings_reconciliation(config, secrets)
+        self._settings_reconciliation(config, secrets, ro_database=ro_database)
         self._robots_txt_reconciliation(config)
 
         if not self._is_database_initialized():
@@ -151,6 +152,8 @@ class MediaWiki(Object):
         """Runs the update maintenance script, updating the MediaWiki database schema if needed.
 
         Should be ran after a MediaWiki upgrade, or after installing or updating an extension that requires a schema update.
+
+        The database should be set to read only mode before running this method, and set back to read/write after completion.
 
         This is potentially dangerous action!
 
@@ -259,41 +262,42 @@ class MediaWiki(Object):
         self,
         config: CharmConfig,
         secrets: "MediaWikiSecrets",
+        ro_database: bool = False,
     ) -> None:
         """Reconcile all the MediaWiki settings derived from LocalSettings.php.
 
         Args:
             config (CharmConfig): The charm configuration.
             secrets (MediaWikiSecrets): An instance of MediaWikiSecrets containing secrets synced between units.
+            ro_database: Whether to include settings that put the database into read-only mode for updates. Defaults to False.
         """
         self._secure_settings_base_path.mkdir(exist_ok=True, parents=True)
 
         self._user_settings_file.write_text(
             config.local_settings, mode=0o640, user=self._ROOT_USER_NAME, group=self._DAEMON_GROUP
         )
-        self._push_late_settings(secrets)
+        self._push_late_settings(secrets, ro_database=ro_database)
         self._push_local_settings(config)
         logger.debug("Settings reconciliation completed successfully.")
 
-    def _push_late_settings(
-        self, secrets: "MediaWikiSecrets", database_update: bool = False
-    ) -> None:
+    def _push_late_settings(self, secrets: "MediaWikiSecrets", ro_database: bool = False) -> None:
         """Push the charm-controlled late MediaWiki settings to the container.
 
         Args:
             secrets (MediaWikiSecrets): An instance of MediaWikiSecrets containing secrets synced between units.
-            database_update: Whether to include settings that put the database into read-only mode for updates. Defaults to False.
+            ro_database: Whether to include settings that put the database into read-only mode for updates. Defaults to False.
         """
         self._secure_settings_base_path.mkdir(exist_ok=True, parents=True)
         content = self._late_settings_template_file.read_text()
         content += self._get_proxy_settings()
         content += self._get_database_settings()
 
-        if database_update:
+        if ro_database:
             # https://www.mediawiki.org/wiki/Manual:Upgrading#Can_my_wiki_stay_online_while_it_is_upgrading?
-            # Todo: We need to have all units be set to a read-only state, not just where this is running.
             content += "$adminTask = ( PHP_SAPI === 'cli' || defined( 'MEDIAWIKI_INSTALL' ) );\n"
             content += "$wgReadOnly = $adminTask ? false : 'Ongoing database update';\n"
+        else:
+            content += "$wgAllowSchemaUpdates = false;\n"
 
         for key, value in secrets.to_local_settings().items():
             content += f"{key} = '{utils.escape_php_string(value)}';\n"

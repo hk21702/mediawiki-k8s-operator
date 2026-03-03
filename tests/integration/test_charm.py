@@ -70,6 +70,8 @@ def test_add_extensions(
 
     update_database_action = juju.run(f"{app.name}/leader", "update-database")
     assert update_database_action.status == "completed"
+    # The DB update completes asynchronously to the action, so we need to be certain that no other actions are still running
+    juju.wait(jubilant.all_active, successes=5)
 
     assert is_reachable(), "MediaWiki not responding at ingress after adding extensions"
 

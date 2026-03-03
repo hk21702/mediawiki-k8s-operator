@@ -73,11 +73,12 @@ def active_state(
     base_state: testing.State,
     traefik_route_relation: testing.Relation,
     database_relation: testing.Relation,
+    mediawiki_replica_relation: testing.PeerRelation,
 ) -> testing.State:
     """Provide a state with all required relations, secrets and a pebble ready container."""
     return dataclasses.replace(
         base_state,
-        relations=[traefik_route_relation, database_relation],
+        relations=[traefik_route_relation, database_relation, mediawiki_replica_relation],
     )
 
 
@@ -157,6 +158,14 @@ def database_relation() -> testing.Relation:
     return testing.Relation(
         endpoint="database",
         interface="mysql_client",
+    )
+
+
+@pytest.fixture
+def mediawiki_replica_relation() -> testing.PeerRelation:
+    """Return a base mediawiki-replica peer relation for testing."""
+    return testing.PeerRelation(
+        endpoint="mediawiki-replica",
     )
 
 

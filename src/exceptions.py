@@ -48,12 +48,6 @@ class MediaWikiWaitingStatusException(MediaWikiStatusException):
     _status_class = ops.model.WaitingStatus
 
 
-class MediaWikiMaintenanceStatusException(MediaWikiStatusException):
-    """Same as :exc:`exceptions.MediaWikiStatusException`."""
-
-    _status_class = ops.model.MaintenanceStatus
-
-
 class MediaWikiInstallError(Exception):
     """Exception for unrecoverable errors during MediaWiki installation."""
 
