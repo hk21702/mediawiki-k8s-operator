@@ -122,16 +122,17 @@ def test_relations(
         f"MediaWiki not responding at {ingress_address} before removing relations"
     )
 
-    # Remove traefik relation and check that the charm remains active, but the ingress address is no longer responsive, but unit address is
+    # Remove traefik relation and check that the charm remains active, but the ingress address is no longer responsive
     juju.remove_relation(app.name, traefik.name)
     juju.wait(lambda status: jubilant.all_active(status) and not is_reachable())
 
     juju.integrate(app.name, traefik.name)
     juju.wait(lambda status: jubilant.all_active(status) and is_reachable())
 
-    # Removing database blocks and makes stops responsiveness entirely
+    # Removing database blocks and stops responsiveness entirely
     juju.remove_relation(app.name, db.name)
     juju.wait(lambda status: status.apps[app.name].is_blocked and not is_reachable())
+    juju.wait(lambda status: jubilant.all_active(status, db.name))
 
     juju.integrate(app.name, db.name)
     juju.wait(lambda status: jubilant.all_active(status) and is_reachable())
