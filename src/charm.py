@@ -17,6 +17,9 @@ from ops import (
     BlockedStatus,
     EventBase,
     MaintenanceStatus,
+    Relation,
+    RelationData,
+    SecretNotFoundError,
     WaitingStatus,
     pebble,
 )
@@ -24,11 +27,11 @@ from ops import (
 from database import Database
 from exceptions import (
     CharmConfigInvalidError,
-    MediaWikiInstallError,
+    MediaWikiBlockedStatusException,
     MediaWikiStatusException,
     MediaWikiWaitingStatusException,
 )
-from mediawiki import MediaWiki
+from mediawiki import MediaWiki, MediaWikiSecrets
 from state import StatefulCharmBase
 
 # Log messages can be retrieved using juju debug-log
@@ -46,12 +49,18 @@ class Charm(StatefulCharmBase):
 
     _INGRESS_RELATION_NAME = "traefik-route"
 
+    _PEER_RELATION_NAME = "mediawiki-replica"
+    _REPLICA_SECRET_LABEL = "replica-secret"  # nosec: B105
+
+    _RO_DATABASE_FLAG = "ro_db"
+
     def __init__(self, *args: typing.Any):
         super().__init__(*args)
 
         self._database = Database(self, self._DATABASE_RELATION_NAME, self._DATABASE_NAME)
         self._mediawiki = MediaWiki(self, self._database)
 
+        self.framework.observe(self.on.leader_elected, self._setup_replica_data)
         self.framework.observe(self.on.mediawiki_pebble_ready, self._reconciliation)
         self.framework.observe(self._database.db.on.database_created, self._reconciliation)
         self.framework.observe(self._database.db.on.endpoints_changed, self._reconciliation)
@@ -62,6 +71,10 @@ class Charm(StatefulCharmBase):
         self.framework.observe(self.on.traefik_route_relation_changed, self._reconciliation)
         self.framework.observe(self.on.traefik_route_relation_broken, self._reconciliation)
         self.framework.observe(self.on.config_changed, self._reconciliation)
+        self.framework.observe(self.on.secret_changed, self._reconciliation)
+        self.framework.observe(
+            self.on[self._PEER_RELATION_NAME].relation_changed, self._reconciliation
+        )
 
         self.framework.observe(
             self.on.rotate_root_credentials_action, self._on_rotate_root_credentials
@@ -107,6 +120,57 @@ class Charm(StatefulCharmBase):
         }
 
         self._container.add_layer(self._SERVICE_NAME, layer, combine=True)
+
+    def _replica_relation(self) -> Relation:
+        """Get the relation object for the replica peer relation.
+
+        Raises:
+            MediaWikiWaitingStatusException: If the peer relation is not ready.
+        """
+        replica_data = self.model.get_relation(self._PEER_RELATION_NAME)
+        if replica_data is None:
+            raise MediaWikiWaitingStatusException(
+                f"Waiting for peer relation {self._PEER_RELATION_NAME} to be ready"
+            )
+        return replica_data
+
+    def _replica_secrets(self) -> MediaWikiSecrets:
+        """Get the generated secrets shared between the MediaWiki replicas.
+
+        Raises:
+            MediaWikiWaitingStatusException: If the secrets are not available yet.
+        """
+        try:
+            secrets_content = self.model.get_secret(label=self._REPLICA_SECRET_LABEL).get_content(
+                refresh=True
+            )
+            return MediaWikiSecrets.from_juju_secret(secrets_content)
+        except SecretNotFoundError:
+            raise MediaWikiWaitingStatusException("Waiting for replica secrets to be available")
+
+    def _replica_consensus_reached(self) -> bool:
+        """Check if the necessary minimal data and secrets shared with MediaWiki peers (replicas) has been initialized and synchronized."""
+        try:
+            self.model.get_secret(label=self._REPLICA_SECRET_LABEL)
+        except SecretNotFoundError:
+            return False
+
+        return True
+
+    def _setup_replica_data(self, _event: EventBase) -> None:
+        """Initialize the synchronized data required for MediaWiki replication.
+
+        The relation data content object is used to share (read and write) necessary secret data
+        used by MediaWiki to enhance security and must be synchronized.
+
+        Only the leader can update the data shared with all replicas.
+        """
+        if self._replica_consensus_reached() or not self.unit.is_leader():
+            return
+
+        logger.info("Creating replica data due to event %s", _event)
+        content = MediaWikiSecrets.generate().to_juju_secret()
+        self.app.add_secret(content, label=self._REPLICA_SECRET_LABEL)
 
     def _configure_ingress(self) -> None:
         """Configure the Traefik ingress relation.
@@ -182,17 +246,87 @@ class Charm(StatefulCharmBase):
         ):
             container.stop(self._SERVICE_NAME)
 
+    def _pre_reconciliation(self) -> tuple[RelationData, MediaWikiSecrets]:
+        """Check for the presence of required relations and secrets, and return them.
+
+        On error, an appropriate MediaWikiStatusException is raised, and the service is stopped.
+
+        Returns:
+            tuple[RelationData, MediaWikiSecrets]:
+                RelationData: The relation data content for the replica relation.
+                MediaWikiSecrets: The secrets shared between replicas.
+
+        Raises:
+            MediaWikiStatusException: If any of the required relations or secrets are not ready.
+        """
+        try:
+            if not self._database.has_relation():
+                raise MediaWikiBlockedStatusException(
+                    f"Waiting for relation {self._DATABASE_RELATION_NAME}"
+                )
+
+            replica_relation = self._replica_relation()
+            replica_secrets = self._replica_secrets()
+        except MediaWikiStatusException as e:
+            self._stop_service()
+            raise e
+
+        return replica_relation.data, replica_secrets
+
+    def _database_reconciliation(self) -> None:
+        """Complete a database schema update if requested and all units are ready.
+
+        Does nothing if the unit calling is not the leader.
+
+        If the self._RO_DATABASE_FLAG flag is set to "true" at the application level and for all units known to the peer relation,
+        then we start the database reconciliation process.
+
+        Once completed, the application level self._RO_DATABASE_FLAG flag is set back to "false" to allow units to return to read-write mode.
+
+        Raises:
+            MediaWikiWaitingStatusException: If the replica peer relation is not ready.
+            MediaWikiWaitingStatusException: If the database update was requested but not all units have entered read-only mode yet.
+        """
+        if not self.unit.is_leader():
+            return
+
+        replica_relation = self._replica_relation()
+        # Check if database update was requested
+        if replica_relation.data[self.app].get(self._RO_DATABASE_FLAG, "false").lower() != "true":
+            return
+        # Check if all units are in read-only mode, which indicates they are ready for the database update
+        for unit in replica_relation.units:
+            unit_data = replica_relation.data[unit]
+            if unit_data.get(self._RO_DATABASE_FLAG, "false").lower() != "true":
+                raise MediaWikiWaitingStatusException(
+                    f"Waiting for unit {unit.name} to acknowledge database update by setting ro_db to true"
+                )
+
+        original_status = self.unit.status
+        self.unit.status = MaintenanceStatus("Updating database schema")
+        logger.info(
+            "All units have acknowledged the database update, proceeding with database schema update"
+        )
+
+        self._mediawiki.update_database_schema()
+
+        replica_relation.data[self.app][self._RO_DATABASE_FLAG] = "false"
+        self.unit.status = original_status
+        logger.info("Database schema update complete")
+
     def _reconciliation(self, _event: EventBase) -> None:
         """Reconcile the charm state.
 
         This method will move the charm towards an active and correct state.
 
         If the container or database relation is not ready, it will not proceed.
-        Additionally, if the database relation is not present, it will stop the apache web server to prevent any chance of data getting written unintentionally.
+        Pre-reconciliation steps are then taken to try and gather all the necessary data and secrets, and to validate a minimal set of prerequisites.
 
         Otherwise, if prerequisite criteria is met, the following actions are attempted:
         - Configure ingress.
         - Trigger the MediaWiki workload reconciliation process.
+        - Flag the unit as being in read-only mode if the database was set to read-only mode.
+        - Trigger the database reconciliation process.
         - Start the MediaWiki service if it is not running.
         - Set the unit status to an appropriate state depending on the outcome of the above actions.
 
@@ -206,21 +340,16 @@ class Charm(StatefulCharmBase):
             self.unit.status = WaitingStatus("Waiting for pebble")
             return
 
-        if not self._database.has_relation():
-            # To prevent the any chance of data getting written unintentionally, we have to check for this case
-            logger.info(
-                "Reconciliation process terminated early, relation %s is not alive",
-                self._DATABASE_RELATION_NAME,
-            )
-            self.unit.status = BlockedStatus(
-                f"Waiting for relation {self._DATABASE_RELATION_NAME}"
-            )
-            self._stop_service()
-            return
-
         try:
+            replica_data, secrets = self._pre_reconciliation()
+            set_ro_database = (
+                replica_data[self.app].get(self._RO_DATABASE_FLAG, "false").lower() == "true"
+            )
+
             self._configure_ingress()
-            self._mediawiki.reconciliation()
+            self._mediawiki.reconciliation(secrets, ro_database=set_ro_database)
+            replica_data[self.unit][self._RO_DATABASE_FLAG] = str(set_ro_database).lower()
+            self._database_reconciliation()
             self._start_service()
         except MediaWikiStatusException as e:
             logger.info("Reconciliation process terminated early, status exception raised: %s", e)
@@ -233,8 +362,13 @@ class Charm(StatefulCharmBase):
             self.unit.status = BlockedStatus(str(e))
             return
 
+        self.unit.status = (
+            MaintenanceStatus("Database set to read-only mode")
+            if set_ro_database
+            else ActiveStatus()
+        )
+
         logger.info("Reconciliation process complete.")
-        self.unit.status = ActiveStatus()
 
     def _on_rotate_root_credentials(self, event: ActionEvent) -> None:
         """Handle the rotate-root-credentials action.
@@ -262,22 +396,24 @@ class Charm(StatefulCharmBase):
     def _on_update_database(self, event: ActionEvent) -> None:
         """Handle the update-database action.
 
-        Update the MediaWiki database schema with the current database configuration.
+        Request a MediaWiki database schema update.
 
         Args:
             event: The event that triggered the database update.
         """
-        logger.info("Updating the MediaWiki database schema due to event: %s", event)
+        logger.info("Requesting a MediaWiki database schema update due to event: %s", event)
 
         if not self.unit.is_leader():
-            event.fail("Only the leader unit can update the MediaWiki database schema")
+            event.fail("Only the leader unit can request a database update")
             return
 
-        try:
-            self._mediawiki.update_database_schema()
-            event.log("MediaWiki database schema updated successfully")
-        except MediaWikiInstallError:
-            event.fail("MediaWiki database schema update failed; check logs for details")
+        replica_data = self.model.get_relation(self._PEER_RELATION_NAME)
+        if replica_data is None:
+            event.fail("Peer relation not ready yet")
+            return
+
+        replica_data.data[self.app][self._RO_DATABASE_FLAG] = "true"
+        event.log("Database update requested")
 
 
 if __name__ == "__main__":  # pragma: nocover

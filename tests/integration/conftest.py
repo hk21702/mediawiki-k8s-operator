@@ -223,6 +223,7 @@ def app_fixture(
         app=app_name,
         config=app_config,
         resources=charm_resources,
+        num_units=3,
         base="ubuntu@24.04",
     )
 

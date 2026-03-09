@@ -132,8 +132,10 @@ actions:
 
   update-database:
     description: >
-      Update the MediaWiki database schema using the `update.php` maintenance script.
+      Request an update to the MediaWiki database schema using the `update.php` maintenance script.
       This may be required after upgrading MediaWiki or installing extensions that modify the database schema.
+
+      The charm will asynchronously request all units to enter a read-only mode before performing the database update to ensure data consistency.
 
       It is highly recommended to back up your database before running this action.
 
@@ -159,6 +161,10 @@ parts:
     plugin: uv
     build-snaps:
       - astral-uv
+
+peers:
+  mediawiki-replica:
+    interface: mediawiki-replica
 
 containers:
   mediawiki:

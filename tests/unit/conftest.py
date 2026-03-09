@@ -15,6 +15,7 @@ from ops import testing
 from pytest_mock import MockerFixture, MockType
 
 from charm import Charm
+from mediawiki import MediaWikiSecrets
 
 
 class ExecCmd(enum.Enum):
@@ -57,8 +58,14 @@ def ctx() -> testing.Context:
 
 
 @pytest.fixture
-def base_state(mediawiki_container: scenario.Container) -> testing.State:
-    return testing.State(containers=[mediawiki_container], leader=True)
+def base_state(
+    mediawiki_container: scenario.Container, secrets: list[testing.Secret]
+) -> testing.State:
+    return testing.State(
+        containers=[mediawiki_container],
+        secrets=secrets,
+        leader=True,
+    )
 
 
 @pytest.fixture
@@ -66,9 +73,13 @@ def active_state(
     base_state: testing.State,
     traefik_route_relation: testing.Relation,
     database_relation: testing.Relation,
+    mediawiki_replica_relation: testing.PeerRelation,
 ) -> testing.State:
-    """Provide a state with all required relations and a pebble ready container."""
-    return dataclasses.replace(base_state, relations=[traefik_route_relation, database_relation])
+    """Provide a state with all required relations, secrets and a pebble ready container."""
+    return dataclasses.replace(
+        base_state,
+        relations=[traefik_route_relation, database_relation, mediawiki_replica_relation],
+    )
 
 
 @pytest.fixture
@@ -148,6 +159,30 @@ def database_relation() -> testing.Relation:
         endpoint="database",
         interface="mysql_client",
     )
+
+
+@pytest.fixture
+def mediawiki_replica_relation() -> testing.PeerRelation:
+    """Return a base mediawiki-replica peer relation for testing."""
+    return testing.PeerRelation(
+        endpoint="mediawiki-replica",
+    )
+
+
+@pytest.fixture
+def secrets() -> list[testing.Secret]:
+    """Return a list of base charm secrets with the expected keys for testing."""
+    # no sec B105 is bugged when multi-line https://github.com/PyCQA/bandit/issues/1352
+    secrets = MediaWikiSecrets(
+        secret_key="mock_key",
+        session_secret="mock_session",
+    )  # nosec: B106
+    return [
+        testing.Secret(
+            testing.RawSecretRevisionContents(secrets.to_juju_secret()),
+            label=Charm._REPLICA_SECRET_LABEL,
+        )
+    ]
 
 
 @pytest.fixture(autouse=True)
