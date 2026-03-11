@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import ops
 
 # pylint: disable=no-name-in-module
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, field_validator
 
 from exceptions import CharmConfigInvalidError
 
@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 class CharmConfig(BaseModel):
     """Configuration schema for the MediaWiki charm, reflecting charmcraft.yaml."""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     composer: str = Field("{}")
+    ssh_key: Optional[ops.Secret] = Field(None)
     static_assets_git_repo: str = Field("")
     static_assets_git_ref: str = Field("")
     hostname: str = Field("")

@@ -66,3 +66,4 @@ class CharmConfigInvalidError(Exception):
             msg: Explanation of the error.
         """
         self.msg = msg
+        super().__init__(msg)

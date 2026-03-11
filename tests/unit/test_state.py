@@ -2,6 +2,8 @@
 # See LICENSE file for licensing details.
 
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,9 +14,9 @@ class TestCharmConfig:
     """Tests for CharmConfig validators."""
 
     @staticmethod
-    def make_config(**overrides: str) -> CharmConfig:
+    def make_config(**overrides: Any) -> CharmConfig:
         """Build a CharmConfig with test defaults and optional overrides."""
-        base_config = {
+        base_config: dict[str, Any] = {
             "composer": "{}",
             "static_assets_git_repo": "",
             "static_assets_git_ref": "",

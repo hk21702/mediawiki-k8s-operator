@@ -186,26 +186,43 @@ class TestReconciliation:
 
         assert found_one, "Expected at least one composer command in exec history"
 
-    def test_webroot_owner_ssh_key_generation(
+    def test_ssh_key_written_when_provided(
         self,
         ctx: testing.Context,
         active_state: testing.State,
-        mediawiki_container: scenario.Container,
     ) -> None:
-        """Test that the SSH key generation command is run during reconciliation if it hasn't been generated yet."""
-        container_no_ssh = dataclasses.replace(
-            mediawiki_container,
-            mounts={k: v for k, v in mediawiki_container.mounts.items() if k != "ssh_dir"},
-        )
-        state_in = dataclasses.replace(active_state, containers=[container_no_ssh])
+        """Test that a user-provided SSH key is written to id_charm in the container."""
+        fake_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
+        with ctx(ctx.on.update_status(), active_state) as mgr:
+            mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate(), ssh_key=fake_key)
+            state_out = mgr.run()
 
-        with ctx(ctx.on.update_status(), state_in) as mgr:
+        container_fs = state_out.get_container(Charm._CONTAINER_NAME).get_filesystem(ctx)
+        key_path = container_fs / "home/webroot_owner/.ssh/id_charm"
+        assert key_path.exists(), "id_charm key file was not written"
+        assert key_path.read_text() == fake_key
+        assert key_path.stat().st_mode & 0o777 == 0o600, "id_charm must be 0o600"
+
+        config_text = (container_fs / "home/webroot_owner/.ssh/config").read_text()
+        assert "IdentityFile" in config_text, "Expected IdentityFile in SSH config when key is set"
+
+    def test_ssh_key_not_written_when_absent(
+        self,
+        ctx: testing.Context,
+        active_state: testing.State,
+    ) -> None:
+        """Test that no id_charm file is written when no SSH key is provided."""
+        with ctx(ctx.on.update_status(), active_state) as mgr:
             mgr.charm.mediawiki.reconciliation(MediaWikiSecrets.generate())
+            state_out = mgr.run()
 
-        assert any(
-            ExecCmd.SSH_KEYGEN.value[0] in cmd.command
-            for cmd in ctx.exec_history[Charm._CONTAINER_NAME]
-        ), "Expected ssh-keygen to be called when SSH key does not exist"
+        container_fs = state_out.get_container(Charm._CONTAINER_NAME).get_filesystem(ctx)
+        assert not (container_fs / "home/webroot_owner/.ssh/id_charm").exists(), (
+            "id_charm should not be present when no SSH key is provided"
+        )
+
+        config_text = (container_fs / "home/webroot_owner/.ssh/config").read_text()
+        assert "IdentityFile" not in config_text, "Did not expect IdentityFile without an SSH key"
 
 
 class TestRotateRootCredentials:

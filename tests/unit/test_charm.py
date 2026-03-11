@@ -489,3 +489,96 @@ class TestUpdateDatabaseAction:
             ctx.run(ctx.on.action("update-database"), state_in)
 
         assert ctx.action_results is None
+
+
+class TestSshKey:
+    """Tests for the _ssh_key() helper in charm.py."""
+
+    _FAKE_KEY = "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n"
+
+    def _state_with_ssh_secret(
+        self,
+        active_state: testing.State,
+        content: dict[str, str],
+    ) -> tuple[testing.State, str]:
+        """Return a state containing a user-owned SSH key secret and the secret's ID.
+
+        User-owned secrets have no app/unit owner in the ops testing model (owner=None).
+        """
+        secret = testing.Secret(
+            testing.RawSecretRevisionContents(content),
+        )
+        state = dataclasses.replace(
+            active_state,
+            secrets=[*active_state.secrets, secret],
+            config={**active_state.config, "ssh-key": secret.id},
+        )
+        return state, secret.id
+
+    def test_ssh_key_passed_to_mediawiki_when_configured(
+        self, ctx: testing.Context, active_state: testing.State, mock_mediawiki: MockType
+    ) -> None:
+        """Test that a secret with the 'mediawiki' field passes the key to reconciliation()."""
+        state_in, _ = self._state_with_ssh_secret(active_state, {"mediawiki": self._FAKE_KEY})
+
+        ctx.run(ctx.on.config_changed(), state_in)
+
+        mock_mediawiki.reconciliation.assert_called_once()
+        _, kwargs = mock_mediawiki.reconciliation.call_args
+        assert kwargs.get("ssh_key") == self._FAKE_KEY
+
+    def test_ssh_key_not_passed_when_not_configured(
+        self, ctx: testing.Context, active_state: testing.State, mock_mediawiki: MockType
+    ) -> None:
+        """Test that ssh_key=None is passed when no ssh-key config is set."""
+        ctx.run(ctx.on.config_changed(), active_state)
+
+        mock_mediawiki.reconciliation.assert_called_once()
+        _, kwargs = mock_mediawiki.reconciliation.call_args
+        assert kwargs.get("ssh_key") is None
+
+    def test_ssh_key_none_when_only_git_sync_field(
+        self, ctx: testing.Context, active_state: testing.State, mock_mediawiki: MockType
+    ) -> None:
+        """Test that ssh_key=None when only the git-sync field is present (no mediawiki key)."""
+        state_in, _ = self._state_with_ssh_secret(active_state, {"git-sync": self._FAKE_KEY})
+
+        ctx.run(ctx.on.config_changed(), state_in)
+
+        mock_mediawiki.reconciliation.assert_called_once()
+        _, kwargs = mock_mediawiki.reconciliation.call_args
+        assert kwargs.get("ssh_key") is None
+
+    def test_ssh_key_blocks_on_no_known_fields(
+        self, ctx: testing.Context, active_state: testing.State
+    ) -> None:
+        """Test that a secret with no recognised fields puts the charm in BlockedStatus."""
+        state_in, _ = self._state_with_ssh_secret(active_state, {"unknown-field": "value"})
+
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+        assert isinstance(state_out.unit_status, ops.BlockedStatus)
+        assert "at least one of" in state_out.unit_status.message
+
+    def test_ssh_key_blocks_on_empty_secret(
+        self, ctx: testing.Context, active_state: testing.State
+    ) -> None:
+        """Test that an ssh-key secret with no fields puts the charm in BlockedStatus."""
+        state_in, _ = self._state_with_ssh_secret(active_state, {})
+
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+        assert isinstance(state_out.unit_status, ops.BlockedStatus)
+        assert "at least one of" in state_out.unit_status.message
+
+    @pytest.mark.parametrize("blank_value", ["", "   ", "\n", "\t"])
+    def test_ssh_key_blocks_on_blank_field_value(
+        self, ctx: testing.Context, active_state: testing.State, blank_value: str
+    ) -> None:
+        """Test that an ssh-key secret with a blank 'mediawiki' value puts the charm in BlockedStatus."""
+        state_in, _ = self._state_with_ssh_secret(active_state, {"mediawiki": blank_value})
+
+        state_out = ctx.run(ctx.on.config_changed(), state_in)
+
+        assert isinstance(state_out.unit_status, ops.BlockedStatus)
+        assert "must not be empty" in state_out.unit_status.message

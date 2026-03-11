@@ -41,7 +41,6 @@ class ExecCmd(enum.Enum):
         "/var/www/html/w/maintenance/run.php",
         "update",
     )
-    SSH_KEYGEN = ("/usr/bin/ssh-keygen",)
 
 
 @pytest.fixture
@@ -98,7 +97,6 @@ def container_mounts(tmp_path):
 
     ssh_dir = tmp_path / "ssh_dir"
     ssh_dir.mkdir(parents=True)
-    (ssh_dir / "id_ed25519").write_text("dummy-contents")
 
     return {
         "install_location": testing.Mount(location="/var/www/html/w", source=install_location),
@@ -144,12 +142,6 @@ def execs() -> Generator[set[testing.Exec], None, None]:
             ExecCmd.MAINTENANCE_UPDATE.value,
             return_code=0,
             stdout="Mocked maintenance update",
-            stderr="",
-        ),
-        testing.Exec(
-            ExecCmd.SSH_KEYGEN.value,
-            return_code=0,
-            stdout="Mocked ssh-keygen",
             stderr="",
         ),
     }

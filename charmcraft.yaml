@@ -58,9 +58,24 @@ config:
 
     ssh-key:
       description: >
-        An SSH private key to enable git access for installing MediaWiki extensions as well as fetching static assets from private repositories.
+        An optional Juju user secret containing SSH private keys to enable git via SSH for
+        operations inside the charm's containers.
 
-        To be implemented.
+        The secret may contain the following fields, each holding a PEM-formatted,
+        non-password-protected private key:
+
+          mediawiki — used inside the mediawiki container, e.g. for installing extensions via
+          Composer from private repositories.
+
+          git-sync — (not implemented) used by the git-sync sidecar container for fetching static assets
+          from a private repository.
+
+        Each field is individually optional; if a field is absent, that container will not use
+        an SSH key.
+
+        Keys are written to the container filesystem, so ensure each key is appropriately scoped.
+
+        Make sure to "grant-secret" this secret to the mediawiki charm.
       type: secret
 
     static-assets-git-repo:
