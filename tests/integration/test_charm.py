@@ -43,6 +43,38 @@ def test_workload_version_is_set(juju: jubilant.Juju, app: App):
 
 
 @pytest.mark.abort_on_fail
+def test_ssh_key_secret(
+    juju: jubilant.Juju, app: App, app_config: dict[str, Any], ssh_key_secret: str
+):
+    """Check that the charm behaves correct regarding the ssh_key Juju secret.
+
+    Note that this test does not attempt to utilize the SSH key as the passed key is not expected to be
+    authorized anywhere.
+    """
+    initial_secret_content = juju.show_secret(ssh_key_secret, reveal=True).content
+
+    app_config["ssh-key"] = ssh_key_secret
+    juju.config(app.name, app_config)
+    juju.wait(jubilant.all_active, successes=5)
+
+    # Block due to empty mediawiki SSH key
+    juju.update_secret(ssh_key_secret, {"mediawiki": ""})
+    juju.wait(lambda status: jubilant.all_blocked(status, app.name))
+
+    # Reset secret
+    juju.update_secret(ssh_key_secret, initial_secret_content)
+    juju.wait(jubilant.all_active)
+
+    # Block due to no valid keys in secret
+    juju.update_secret(ssh_key_secret, {"invalid-field": "value"})
+    juju.wait(lambda status: jubilant.all_blocked(status, app.name))
+
+    app_config.pop("ssh-key")
+    juju.config(app.name, app_config, reset="ssh-key")
+    juju.wait(jubilant.all_active)
+
+
+@pytest.mark.abort_on_fail
 def test_add_extensions(
     juju: jubilant.Juju,
     app: App,

@@ -242,6 +242,18 @@ def app_fixture(
     yield App(name=app_name)
 
 
+@pytest.fixture(scope="module", name="ssh_key_secret")
+def ssh_key_secret_fixture(juju: jubilant.Juju, app: App) -> Generator[str, None, None]:
+    """Fixture to provide the SSH key secret for the MediaWiki application.
+
+    The private keys are fake and are not authorized for use anywhere.
+    """
+    secret_content = {"mediawiki": "fake-private-key-for-mediawiki"}
+    secret_uri = juju.add_secret("ssh-key-secret", secret_content)
+    juju.grant_secret(secret_uri, app.name)
+    yield secret_uri
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """Pytest hook wrapper to set the test's rep_* attribute for abort_on_fail."""
