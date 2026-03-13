@@ -253,6 +253,10 @@ class MediaWiki(Object):
             ssh_config_lines.append(f"    IdentityFile {self._webroot_owner_ssh_key}")
         if (proxy := self._charm.state.proxy_config) and proxy.http_proxy:
             proxy_host = str(proxy.http_proxy.host)
+            if not proxy.http_proxy.port:
+                logger.debug(
+                    "Using fallback proxy port 3128 for SSH ProxyCommand because proxy configuration did not include a port."
+                )
             proxy_port = str(proxy.http_proxy.port) if proxy.http_proxy.port else "3128"
             ssh_config_lines.append(
                 f"    ProxyCommand socat - PROXY:{proxy_host}:%h:%p,proxyport={proxy_port}"
