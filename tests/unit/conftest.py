@@ -95,8 +95,12 @@ def container_mounts(tmp_path):
     install_location = tmp_path / "install_location"
     install_location.mkdir(parents=True)
 
+    ssh_dir = tmp_path / "ssh_dir"
+    ssh_dir.mkdir(parents=True)
+
     return {
         "install_location": testing.Mount(location="/var/www/html/w", source=install_location),
+        "ssh_dir": testing.Mount(location="/home/webroot_owner/.ssh", source=ssh_dir),
     }
 
 

@@ -17,6 +17,7 @@ from ops import (
     BlockedStatus,
     EventBase,
     MaintenanceStatus,
+    ModelError,
     Relation,
     RelationData,
     SecretNotFoundError,
@@ -53,6 +54,10 @@ class Charm(StatefulCharmBase):
     _REPLICA_SECRET_LABEL = "replica-secret"  # nosec: B105
 
     _RO_DATABASE_FLAG = "ro_db"
+
+    _SSH_KEY_MEDIAWIKI_FIELD = "mediawiki"
+    _SSH_KEY_GIT_SYNC_FIELD = "git-sync"
+    _SSH_KEY_FIELDS = frozenset({_SSH_KEY_MEDIAWIKI_FIELD, _SSH_KEY_GIT_SYNC_FIELD})
 
     def __init__(self, *args: typing.Any):
         super().__init__(*args)
@@ -246,6 +251,41 @@ class Charm(StatefulCharmBase):
         ):
             container.stop(self._SERVICE_NAME)
 
+    def _ssh_key(self, field: str) -> typing.Optional[str]:
+        """Get an SSH private key from the configured user secret by field name.
+
+        Args:
+            field: The secret field name to retrieve (e.g. 'mediawiki' or 'git-sync').
+
+        Returns:
+            The private key for the requested field, or None if absent or ssh-key is not set.
+
+        Raises:
+            CharmConfigInvalidError: If the configured secret does not exist, contains none
+                of the recognised fields, or the requested field's value is blank.
+        """
+        try:
+            secret = self.load_charm_config().ssh_key
+            if secret is None:
+                return None
+            content = secret.get_content(refresh=True)
+        except SecretNotFoundError:
+            raise CharmConfigInvalidError("The configured ssh-key secret does not exist.")
+        except ModelError:
+            raise CharmConfigInvalidError("The configured ssh-key secret is not accessible.")
+
+        if not (content.keys() & self._SSH_KEY_FIELDS):
+            raise CharmConfigInvalidError(
+                "The ssh-key secret must contain at least one of: "
+                + ", ".join(f"'{f}'" for f in self._SSH_KEY_FIELDS)
+                + "."
+            )
+
+        value = content.get(field)
+        if value is not None and not value.strip():
+            raise CharmConfigInvalidError(f"The ssh-key secret field '{field}' must not be empty.")
+        return value
+
     def _pre_reconciliation(self) -> tuple[RelationData, MediaWikiSecrets]:
         """Check for the presence of required relations and secrets, and return them.
 
@@ -347,7 +387,11 @@ class Charm(StatefulCharmBase):
             )
 
             self._configure_ingress()
-            self._mediawiki.reconciliation(secrets, ro_database=set_ro_database)
+            self._mediawiki.reconciliation(
+                secrets,
+                ssh_key=self._ssh_key(self._SSH_KEY_MEDIAWIKI_FIELD),
+                ro_database=set_ro_database,
+            )
             replica_data[self.unit][self._RO_DATABASE_FLAG] = str(set_ro_database).lower()
             self._database_reconciliation()
             self._start_service()
