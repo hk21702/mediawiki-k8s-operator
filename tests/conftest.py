@@ -33,3 +33,8 @@ def pytest_addoption(parser):
         action="store",
         help="MediaWiki OCI image built for the MediaWiki charm",
     )
+
+
+def pytest_configure(config):
+    """Adds config options."""
+    config.addinivalue_line("markers", "abort_on_fail")
