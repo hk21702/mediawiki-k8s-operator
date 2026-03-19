@@ -18,11 +18,13 @@ platforms:
   amd64:
 
 charm-libs:
-  - lib: traefik_k8s.traefik_route
-    version: "0"
   - lib: data_platform_libs.data_interfaces
     version: "0"
   - lib: data_platform_libs.s3
+    version: "0"
+  - lib: hydra.oauth
+    version: "0"
+  - lib: traefik_k8s.traefik_route
     version: "0"
 
 config:
