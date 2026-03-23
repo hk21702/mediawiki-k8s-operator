@@ -25,6 +25,7 @@ from exceptions import (
     MediaWikiInstallError,
     MediaWikiWaitingStatusException,
 )
+from oauth import OAuth
 from s3 import S3
 from state import CharmConfig, StatefulCharmBase
 from types_ import CommandExecResult, PhpTemplate
@@ -58,10 +59,11 @@ class MediaWiki(Object):
         LocalPath(__file__).parent / "templates" / "LateSettings.php.template"
     )
 
-    def __init__(self, charm: StatefulCharmBase, database: Database, s3: S3):
+    def __init__(self, charm: StatefulCharmBase, database: Database, oauth: OAuth, s3: S3):
         self._charm = charm
         self._container = self._charm.unit.get_container("mediawiki")
         self._database = database
+        self._oauth = oauth
         self._s3 = s3
 
         self._webroot_path = ContainerPath("/var/www/html", container=self._container)
@@ -390,6 +392,7 @@ class MediaWiki(Object):
         content = self._late_settings_template_file.read_text()
         content += self._get_proxy_settings()
         content += self._get_database_settings()
+        content += self._get_oauth_settings()
 
         s3_config_error: Optional[MediaWikiBlockedStatusException] = None
         try:
@@ -554,6 +557,68 @@ class MediaWiki(Object):
             ];
             """
         )
+        return content + "\n"
+
+    def _get_oauth_settings(self) -> str:
+        """Get the current OAuth settings as a string, to be inserted into a PHP file.
+
+        Returns:
+            str: The OAuth settings formatted as a PHP string.
+        """
+        provider_info = self._oauth.get_provider_info()
+        if (
+            not provider_info
+            or provider_info.client_id is None
+            or provider_info.client_secret is None
+        ):
+            logger.debug("OAuth relation data is incomplete or missing, skipping OAuth settings.")
+            return ""
+
+        # https://www.mediawiki.org/wiki/Extension:OpenID_Connect
+        data_entries = [
+            f"'providerURL' => '{utils.escape_php_string(provider_info.issuer_url)}'",
+            f"'clientID' => '{utils.escape_php_string(provider_info.client_id)}'",
+            f"'clientSecret' => '{utils.escape_php_string(provider_info.client_secret)}'",
+        ]
+        if provider_info.scope:
+            data_entries.append(f"'scope' => '{utils.escape_php_string(provider_info.scope)}'")
+        if proxy := self._charm.state.proxy_config:
+            if url := proxy.https_proxy_string:
+                data_entries.append(f"'proxy' => '{utils.escape_php_string(url)}'")
+            elif url := proxy.http_proxy_string:
+                logger.info("No HTTPS proxy; falling back to HTTP proxy for OIDC.")
+                data_entries.append(f"'proxy' => '{utils.escape_php_string(url)}'")
+
+        data_str = ",\n                ".join(data_entries)
+
+        # To facilitate custom user settings, we use array_replace_recursive here to merge if needed
+        # The auth extensions should not be loaded when running createAndPromote.php.
+        # See https://www.mediawiki.org/wiki/Extension:OpenID_Connect#Known_issues for more details.
+        content = textwrap.dedent(
+            f"""
+            $_skipAuth = PHP_SAPI === 'cli'
+                && in_array( 'createAndPromote', $_SERVER['argv'] ?? [], true );
+
+            if ( !$_skipAuth ) {{
+                wfLoadExtension( 'PluggableAuth' );
+                wfLoadExtension( 'OpenIDConnect' );
+            }}
+            unset( $_skipAuth );
+
+            $wgPluggableAuth_Config = array_replace_recursive(
+                $wgPluggableAuth_Config ?? [],
+                [
+                    [
+                        'plugin' => 'OpenIDConnect',
+                        'data' => [
+                            {data_str}
+                        ]
+                    ]
+                ]
+            );
+            """
+        )
+
         return content + "\n"
 
     def _get_s3_settings(self) -> str:

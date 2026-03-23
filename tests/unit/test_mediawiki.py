@@ -12,6 +12,7 @@ from ops import testing
 from pytest_mock import MockerFixture, MockType
 
 import database
+import oauth
 import s3
 from charm import Charm
 from exceptions import MediaWikiBlockedStatusException, MediaWikiInstallError
@@ -27,8 +28,9 @@ class WrapperCharm(StatefulCharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.database = database.Database(self, "database", Charm._CONTAINER_NAME)
+        self.oauth = oauth.OAuth(self, "oauth")
         self.s3 = s3.S3(self, "s3-parameters")
-        self.mediawiki = MediaWiki(self, self.database, self.s3)
+        self.mediawiki = MediaWiki(self, self.database, self.oauth, self.s3)
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +46,21 @@ def mock_database(mocker: MockerFixture) -> MockType:
         password="mocked-password",  # nosec: B106
     )
     mock_instance.is_relation_ready.return_value = True
+
+    return mock_instance
+
+
+@pytest.fixture(autouse=True)
+def mock_oauth(mocker: MockerFixture) -> MockType:
+    """Base OAuth class mock.
+
+    By default, makes it so OAuth does nothing.
+    """
+    mock_oauth_cls = mocker.patch("oauth.OAuth", autospec=True)
+    mock_instance = mock_oauth_cls.return_value
+
+    mock_instance.update_client_config.return_value = None
+    mock_instance.get_provider_info.return_value = None
 
     return mock_instance
 

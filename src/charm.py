@@ -33,6 +33,7 @@ from exceptions import (
     MediaWikiWaitingStatusException,
 )
 from mediawiki import MediaWiki, MediaWikiSecrets
+from oauth import OAuth
 from s3 import S3
 from state import StatefulCharmBase
 
@@ -51,6 +52,7 @@ class Charm(StatefulCharmBase):
 
     _INGRESS_RELATION_NAME = "traefik-route"
 
+    _OAUTH_RELATION_NAME = "oauth"
     _S3_RELATION_NAME = "s3-parameters"
 
     _PEER_RELATION_NAME = "mediawiki-replica"
@@ -66,27 +68,35 @@ class Charm(StatefulCharmBase):
         super().__init__(*args)
 
         self._database = Database(self, self._DATABASE_RELATION_NAME, self._DATABASE_NAME)
+        self._oauth = OAuth(self, self._OAUTH_RELATION_NAME)
         self._s3 = S3(self, self._S3_RELATION_NAME)
-        self._mediawiki = MediaWiki(self, self._database, self._s3)
+        self._mediawiki = MediaWiki(self, self._database, self._oauth, self._s3)
 
         self.framework.observe(self.on.leader_elected, self._setup_replica_data)
-        self.framework.observe(self.on.mediawiki_pebble_ready, self._reconciliation)
-        self.framework.observe(self._database.db.on.database_created, self._reconciliation)
-        self.framework.observe(self._database.db.on.endpoints_changed, self._reconciliation)
-        self.framework.observe(
-            self.on[self._DATABASE_RELATION_NAME].relation_broken, self._reconciliation
-        )
-        self.framework.observe(self._s3.s3.on.credentials_changed, self._reconciliation)
-        self.framework.observe(self._s3.s3.on.credentials_gone, self._reconciliation)
-        self.framework.observe(self.on.traefik_route_relation_joined, self._reconciliation)
-        self.framework.observe(self.on.traefik_route_relation_changed, self._reconciliation)
-        self.framework.observe(self.on.traefik_route_relation_broken, self._reconciliation)
-        self.framework.observe(self.on.config_changed, self._reconciliation)
-        self.framework.observe(self.on.secret_changed, self._reconciliation)
-        self.framework.observe(
-            self.on[self._PEER_RELATION_NAME].relation_changed, self._reconciliation
-        )
 
+        # Reconciliation events
+        reconciliation_events = [
+            self.on.mediawiki_pebble_ready,
+            self._database.db.on.database_created,
+            self._database.db.on.endpoints_changed,
+            self.on[self._DATABASE_RELATION_NAME].relation_broken,
+            self.on[self._OAUTH_RELATION_NAME].relation_created,
+            self.on[self._OAUTH_RELATION_NAME].relation_changed,
+            self._oauth.oauth.on.oauth_info_changed,
+            self._oauth.oauth.on.oauth_info_removed,
+            self._s3.s3.on.credentials_changed,
+            self._s3.s3.on.credentials_gone,
+            self.on.traefik_route_relation_joined,
+            self.on.traefik_route_relation_changed,
+            self.on.traefik_route_relation_broken,
+            self.on.config_changed,
+            self.on.secret_changed,
+            self.on[self._PEER_RELATION_NAME].relation_changed,
+        ]
+        for event in reconciliation_events:
+            self.framework.observe(event, self._reconciliation)
+
+        # Actions
         self.framework.observe(
             self.on.rotate_root_credentials_action, self._on_rotate_root_credentials
         )
@@ -368,6 +378,7 @@ class Charm(StatefulCharmBase):
 
         Otherwise, if prerequisite criteria is met, the following actions are attempted:
         - Configure ingress.
+        - Configure OAuth if necessary.
         - Trigger the MediaWiki workload reconciliation process.
         - Flag the unit as being in read-only mode if the database was set to read-only mode.
         - Trigger the database reconciliation process.
@@ -391,6 +402,7 @@ class Charm(StatefulCharmBase):
             )
 
             self._configure_ingress()
+            self._oauth.update_client_config()
             self._mediawiki.reconciliation(
                 secrets,
                 ssh_key=self._ssh_key(self._SSH_KEY_MEDIAWIKI_FIELD),
