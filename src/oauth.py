@@ -4,11 +4,13 @@
 """Provides the OAuth class to handle OAuth relations and state."""
 
 import logging
-from typing import Iterable
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from charms.hydra.v0.oauth import ClientConfig, OauthProviderConfig, OAuthRequirer
-from ops import CharmBase, Object
+from ops import Object
+
+from exceptions import MediaWikiBlockedStatusException
+from state import StatefulCharmBase
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,10 @@ logger = logging.getLogger(__name__)
 class OAuth(Object):
     """The OAuth relation handler."""
 
-    def __init__(self, charm: CharmBase, relation_name: str):
+    _base_scope = frozenset({"openid", "profile", "email"})
+    _grant_types = frozenset({"authorization_code"})
+
+    def __init__(self, charm: StatefulCharmBase, relation_name: str):
         """Initialize the handler and register event handlers.
 
         Args:
@@ -25,22 +30,38 @@ class OAuth(Object):
         """
         super().__init__(charm, "oauth-observer")
 
-        self._base_scope = {"openid", "profile", "email"}
-        self.oauth = OAuthRequirer(charm, relation_name=relation_name)
+        self._charm = charm
+        self.oauth = OAuthRequirer(self._charm, relation_name=relation_name)
 
     def update_client_config(
         self,
-        external_hostname: str,
         redirect_path: str = "w/index.php/Special:PluggableAuthLogin",
-        extra_scope: Iterable[str] = (),
     ) -> None:
-        """Update the client config from the relation."""
+        """Update the client config from the relation.
+
+        Note, if a protocol-relative URL is used, we fall back to HTTP for the redirect URI.
+
+        Args:
+            redirect_path: The path to use for the redirect URI, relative to the URL origin.
+
+        Raises:
+            MediaWikiBlockedStatusException: If the client config update fails.
+        """
+        config = self._charm.load_charm_config()
+        url_origin = config.url_origin or f"//{self._charm.app.name}"
+        parsed_url = urlparse(url_origin, scheme="http://")
+
+        extra_scopes = config.oauth_extra_scopes.split()
         client_config = ClientConfig(
-            urljoin(external_hostname, redirect_path),
-            " ".join(self._base_scope | set(extra_scope)),
-            ["authorization_code"],
+            urljoin(parsed_url.geturl(), redirect_path),
+            " ".join(self._base_scope | set(extra_scopes)),
+            list(self._grant_types),
         )
-        self.oauth.update_client_config(client_config)
+        try:
+            self.oauth.update_client_config(client_config)
+        except Exception as e:
+            logger.error("Failed to update OAuth client config: %s", e)
+            raise MediaWikiBlockedStatusException("Failed to update OAuth client config") from e
 
     def get_provider_info(self) -> OauthProviderConfig | None:
         """Get the provider info from the relation."""
