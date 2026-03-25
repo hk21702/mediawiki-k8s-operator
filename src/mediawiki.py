@@ -14,7 +14,6 @@ from typing import Any, Callable, List, Optional, TypeVar, Union, cast
 
 import mysql.connector
 import ops
-import requests
 from charmlibs.pathops import ContainerPath, LocalPath
 from ops import Object
 
@@ -48,8 +47,11 @@ class MediaWiki(Object):
     _BASE_TIMEOUT = 60
     _LONG_TIMEOUT = _BASE_TIMEOUT * 10
     _DB_CHECK_TIMEOUT = _BASE_TIMEOUT * 3
-    _REQUEST_TIMEOUT = 10
     _DB_CHECK_INTERVAL = 5
+
+    # Extensions bundled in the rock image that should always be loaded
+    # during schema updates, regardless of whether they are configured.
+    _BUNDLED_EXTENSIONS = ("PluggableAuth", "OpenIDConnect")
 
     # Template paths
     _local_settings_template_file = (
@@ -81,6 +83,7 @@ class MediaWiki(Object):
         )
         self._user_settings_file = self._secure_settings_base_path / "UserSettings.php"
         self._late_settings_file = self._secure_settings_base_path / "LateSettings.php"
+        self._update_wrapper_file = self._secure_settings_base_path / "UpdateWrapper.php"
 
         # Script paths
         self._composer_path = ContainerPath("/usr/bin/composer", container=self._container)
@@ -172,12 +175,26 @@ class MediaWiki(Object):
 
         If already in a ready state, the database should be set to read only mode before running this method, and set back to read/write after completion.
 
+        Bundled extensions listed in ``_BUNDLED_EXTENSIONS`` are always force-loaded so that ``update.php`` creates or migrates their tables even when they are not enabled in the normal settings.
+
         This is potentially dangerous action!
 
         Raises:
             MediaWikiInstallError: If the database update process fails.
         """
-        result = self._run_maintenance_script(["update"])
+        lines = [
+            "<?php",
+            f'require_once "{self._local_settings_file}";',
+            *(f"wfLoadExtension('{ext}');" for ext in self._BUNDLED_EXTENSIONS),
+        ]
+        self._update_wrapper_file.parent.mkdir(exist_ok=True, parents=True)
+        self._update_wrapper_file.write_text(
+            "\n".join(lines) + "\n",
+            mode=0o640,
+            user=self._ROOT_USER_NAME,
+            group=self._DAEMON_GROUP,
+        )
+        result = self._run_maintenance_script(["update", "--conf", str(self._update_wrapper_file)])
         if result.return_code != 0:
             logger.error(
                 "Database schema update failed with return code %s\nstdout: %s\nstderr: %s",
@@ -188,36 +205,6 @@ class MediaWiki(Object):
             raise MediaWikiInstallError("Database schema update failed; see logs for details.")
         else:
             logger.info("Database schema update output:\n%s", result.stdout)
-
-    def get_version(self) -> str:
-        """Fetches the running version of MediaWiki via its API.
-
-        Returns:
-            The version string if it can be fetched, or an empty string if fetching the version failed for any reason.
-        """
-        try:
-            response = requests.get(
-                "http://localhost/w/api.php?action=query&format=json&prop=&meta=siteinfo&formatversion=2",
-                timeout=self._REQUEST_TIMEOUT,
-            )
-        except requests.exceptions.RequestException as e:
-            logger.error("Failed to fetch MediaWiki version: %s", e)
-            return ""
-
-        if response.status_code != 200:
-            logger.error(
-                "Failed to fetch MediaWiki version, API responded with status code %s",
-                response.status_code,
-            )
-            return ""
-
-        try:
-            data = response.json()
-            version = data.get("query", {}).get("general", {}).get("generator", "").lower()
-            return "-".join(version.split()).lower()
-        except requests.exceptions.JSONDecodeError:
-            logger.error("Failed to decode MediaWiki version response as JSON: %s", response.text)
-            return ""
 
     def _ssh_config_reconciliation(self, ssh_key: Optional[str]) -> None:
         """Configure the SSH environment for the webroot_owner user.
@@ -581,7 +568,8 @@ class MediaWiki(Object):
             f"'clientSecret' => '{utils.escape_php_string(provider_info.client_secret)}'",
         ]
         if provider_info.scope:
-            data_entries.append(f"'scope' => '{utils.escape_php_string(provider_info.scope)}'")
+            scopes = self._oauth.scopes() & set(provider_info.scope.split())
+            data_entries.append(f"'scope' => '{utils.escape_php_string(' '.join(scopes))}'")
         if proxy := self._charm.state.proxy_config:
             if url := proxy.https_proxy_string:
                 data_entries.append(f"'proxy' => '{utils.escape_php_string(url)}'")
