@@ -534,7 +534,8 @@ class MediaWiki(Object):
         ]
 
         servers_str = ",\n".join(servers_php)
-        servers_str = textwrap.indent(servers_str, "    ")
+        _servers_idt = str.maketrans({"\n": "\n" + " " * 16})
+        servers_str = servers_str.translate(_servers_idt)
 
         content = textwrap.dedent(
             f"""
@@ -562,22 +563,22 @@ class MediaWiki(Object):
             return ""
 
         # https://www.mediawiki.org/wiki/Extension:OpenID_Connect
-        data_entries = [
-            f"'providerURL' => '{utils.escape_php_string(provider_info.issuer_url)}'",
-            f"'clientID' => '{utils.escape_php_string(provider_info.client_id)}'",
-            f"'clientSecret' => '{utils.escape_php_string(provider_info.client_secret)}'",
-        ]
+        data_str = textwrap.dedent(f"""\
+            'providerURL' => '{utils.escape_php_string(provider_info.issuer_url)}',
+            'clientID' => '{utils.escape_php_string(provider_info.client_id)}',
+            'clientSecret' => '{utils.escape_php_string(provider_info.client_secret)}'""")
         if provider_info.scope:
             scopes = self._oauth.scopes() & set(provider_info.scope.split())
-            data_entries.append(f"'scope' => '{utils.escape_php_string(' '.join(scopes))}'")
+            data_str += f",\n'scope' => '{utils.escape_php_string(' '.join(sorted(scopes)))}'"
         if proxy := self._charm.state.proxy_config:
             if url := proxy.https_proxy_string:
-                data_entries.append(f"'proxy' => '{utils.escape_php_string(url)}'")
+                data_str += f",\n'proxy' => '{utils.escape_php_string(url)}'"
             elif url := proxy.http_proxy_string:
                 logger.info("No HTTPS proxy; falling back to HTTP proxy for OIDC.")
-                data_entries.append(f"'proxy' => '{utils.escape_php_string(url)}'")
+                data_str += f",\n'proxy' => '{utils.escape_php_string(url)}'"
 
-        data_str = ",\n                ".join(data_entries)
+        _data_idt = str.maketrans({"\n": "\n" + " " * 28})
+        data_str = data_str.translate(_data_idt)
 
         # To facilitate custom user settings, we use array_replace_recursive here to merge if needed
         # The auth extensions should not be loaded when running createAndPromote.php.
