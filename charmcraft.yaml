@@ -182,6 +182,10 @@ requires:
     interface: oauth
     limit: 1
     optional: true
+  redis:
+    interface: redis
+    limit: 1
+    optional: true
   s3-parameters:
     interface: s3
     limit: 1
