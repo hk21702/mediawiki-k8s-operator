@@ -658,15 +658,45 @@ class MediaWiki(Object):
             )
 
         job_runner_config = {
-            "groups": {"basic": {"runners": 0}},
+            "groups": {
+                "basic": {
+                    "runners": 19,
+                    "include": ["*"],
+                    "low-priority": ["htmlCacheUpdate", "refreshLinks"],
+                    "exclude": [
+                        "AssembleUploadChunks",
+                        "PublishStashedFile",
+                        "uploadFromUrl",
+                        "webVideoTranscode",
+                        "webVideoTranscodePrioritized",
+                    ],
+                },
+                "transcode": {"runners": 0, "include": ["webVideoTranscode"]},
+                "priorityTranscode": {"runners": 0, "include": ["webVideoTranscodePrioritized"]},
+                "upload": {
+                    "runners": 7,
+                    "include": ["AssembleUploadChunks", "PublishStashedFile", "uploadFromUrl"],
+                },
+            },
             "limits": {
-                "attempts": {"*": 3}
+                "attempts": {"*": 3},
+                "claimTTL": {
+                    "*": 3600,
+                    "webVideoTranscode": 86400,
+                    "webVideoTranscodePrioritized": 86400,
+                },
+                "real": {
+                    "*": 300,
+                    "webVideoTranscode": 86400,
+                    "webVideoTranscodePrioritized": 86400,
+                },
+                "memory": {"*": "300M"},
             },
             "redis": {
                 "aggregators": [endpoint],
                 "queues": [endpoint],
             },
-            "dispatcher": "nothing",
+            "dispatcher": f"{self._php_cli_path} {self._maintenance_scripts_base_path / 'run.php'} runJobs --wiki=%(db)x --type=%(type)x --maxtime=%(maxtime)x --memory-limit=%(maxmem)x --result=json",
         }
         self._job_runner_config.write_text(
             json.dumps(job_runner_config, indent=4),
