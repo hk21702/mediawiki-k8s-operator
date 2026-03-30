@@ -30,4 +30,5 @@ header:
   - '**/*.md.j2'
   - 'docs/**'
   - 'uv.lock'
+  - 'icon.svg'
   comment: on-failure
