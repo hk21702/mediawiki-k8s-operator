@@ -44,3 +44,6 @@
 
 .. SHORTCUTS
 .. |RST| replace:: :abbr:`reST (reStructuredText)`
+
+
+.. _MediaWiki: https://www.mediawiki.org
