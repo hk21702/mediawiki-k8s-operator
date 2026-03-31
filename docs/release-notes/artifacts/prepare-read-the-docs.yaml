@@ -1,0 +1,15 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Prepare Read the Docs documentation
+  author: edibotopic
+  type: minor
+  description: Prepare the required files for hosting the documentation on Read the Docs.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/29"
+  visibility: public
+  highlight: false
+
