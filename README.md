@@ -10,7 +10,7 @@ Use links instead.
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
 
-# MediaWiki K8s Operator
+# MediaWiki K8s operator
 
 [![License][license-image]](LICENSE)
 

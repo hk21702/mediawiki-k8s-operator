@@ -28,8 +28,12 @@ Our documentation is also available alongside the source code on GitHub.
 You may open a pull request with your documentation changes, or you can
 file a bug to provide constructive feedback or suggestions.
 
+.. vale Canonical.007-Headings-sentence-case = NO
+
 AI usage
 --------
+
+.. vale Canonical.007-Headings-sentence-case = YES
 
 You are free to use any tools you want while preparing your contribution, including
 AI, provided that you do so lawfully and ethically. 
@@ -55,7 +59,7 @@ We have created instructions and tools that you can provide AI while preparing
 your contribution in `copilot-collections <https://github.com/canonical/copilot-collections>`_: 
 
 * `Documentation instructions <https://github.com/canonical/copilot-collections/tree/main/assets/instructions/documentation>`_
-* `Documentation skills <https://github.com/canonical/copilot-collections/tree/main/assets/skills>`_
+* `Documentation skills <https://github.com/canonical/copilot-collections/tree/main/skills>`_
 
 While it isn't necessary to use ``copilot-collections`` while preparing your
 contribution, these files contain details about our documentation standards and
