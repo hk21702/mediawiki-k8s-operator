@@ -246,6 +246,8 @@ linkcheck_ignore = [
     "https://example.com",
     # SourceForge domains often block linkcheck
     r"https://.*\.sourceforge\.(net|io)/.*",
+    # Root page returns 404 but this is expected
+    "https://repo.packagist.org/",
     ]
 
 

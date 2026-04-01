@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Add a reference page detailing firewall allowlist requirements
+  author: hk21702
+  type: minor
+  description: Added a reference page to the documentation detailing firewall allowlist requirements. These are the domain URLs and other considerations one may need to make should they deploy the MediaWiki charm behind an egress-limited environment.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/41"
+  visibility: public
+  highlight: false
