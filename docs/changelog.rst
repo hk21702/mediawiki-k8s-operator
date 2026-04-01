@@ -16,6 +16,7 @@ Each revision is versioned by the date of the revision.
 ----------
 
 - Added documentation page on firewall allowlist requirements.
+- Added documentation page detailing security considerations.
 
 2026-03-31
 ----------------
