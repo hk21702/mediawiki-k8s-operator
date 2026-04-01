@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Migrate docs to RST
+  author: hk21702
+  type: minor
+  description: Migrated documentation to reStructuredText (RST) format.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/34"
+  visibility: internal
+  highlight: false
