@@ -24,7 +24,7 @@ import yaml
 #
 # TODO: Update with the official name of your project or product
 
-project = "MediaWiki charm"
+project = "MediaWiki K8s charm"
 author = "Canonical Ltd."
 
 # The year in the copyright statement defaults to the current year, so
