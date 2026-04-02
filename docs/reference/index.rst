@@ -56,7 +56,12 @@ Advanced topics
 ---------------
 
 These pages provide more details about advanced-level topics such
-as Terraform.
+as firewall allowlist requirements and Terraform.
+
+.. toctree::
+    :maxdepth: 1
+
+    Firewall allowlist <allowlist>
 
 .. toctree::
     :hidden:

@@ -15,6 +15,7 @@ Each revision is versioned by the date of the revision.
 2026-04-01
 ----------
 
+- Added documentation page on firewall allowlist requirements.
 - Added documentation page on included extensions and skins.
 
 2026-03-31

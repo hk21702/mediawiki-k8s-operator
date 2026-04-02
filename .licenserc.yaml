@@ -21,6 +21,7 @@ header:
   - '.jujuignore'
   - '.gitignore'
   - '.licenserc.yaml'
+  - '.lycheeignore'
   - '.trivyignore'
   - 'CODEOWNERS'
   - 'LICENSE'
