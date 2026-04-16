@@ -48,9 +48,9 @@ Learn more about operations focused on advanced configurations and security.
 
 .. - **Advanced operations**: Relevant how-to guides • Relevant reference pages 
 .. - **Charm-specific topic**: Relevant how-to guides • Relevant reference pages
-.. - **Design**: Architecture • Design
 
 - **Security**: :ref:`Overview <explanation_security>` • :ref:`Firewall allowlist <reference_allowlist>`
+- **Design**: :ref:`Architecture <reference_charm_architecture>`
 - **Troubleshooting**: :ref:`How to troubleshoot <how_to_troubleshoot>`
 
 Develop and contribute

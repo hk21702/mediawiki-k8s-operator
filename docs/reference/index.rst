@@ -48,13 +48,13 @@ a high-level deployment with any required dependencies.
 .. toctree::
     :maxdepth: 1
 
+    Charm architecture <charm-architecture>
     Charm managed configuration settings <charm-managed-settings>
 
 .. toctree::
     :hidden:
     :maxdepth: 1
 
-    Charm architecture <charm-architecture>
     High-level deployment overview <high-level-deployment>
 
 Advanced topics
