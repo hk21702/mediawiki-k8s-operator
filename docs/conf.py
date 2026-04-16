@@ -1,5 +1,6 @@
 import datetime
 import os
+
 import yaml
 
 # Configuration for the Sphinx documentation builder.
@@ -29,7 +30,7 @@ author = "Canonical Ltd."
 
 # The year in the copyright statement defaults to the current year, so
 # individual document versions show when they were built.
-# TODO: If the date must be a range, like in a software license, replace 
+# TODO: If the date must be a range, like in a software license, replace
 # 2026 with the starting year of development and use:
 #
 # copyright = f"2026-{datetime.date.today().year}"
@@ -118,11 +119,9 @@ html_context = {
     # Docs branch in the repo; used in links for viewing the source files
     #
     # TODO: To customise the branch, uncomment and update as needed.
-    'repo_default_branch': 'main',
+    "repo_default_branch": "main",
     # Docs location in the repo; used in links for viewing the source files
     #
-
-
     # TODO: To customise the directory, uncomment and update as needed.
     "repo_folder": "/docs/",
     # TODO: To enable or disable the Previous / Next buttons at the bottom of pages
@@ -130,13 +129,10 @@ html_context = {
     # "sequential_nav": "both",
     # TODO: To enable listing contributors on individual pages, set to True
     "display_contributors": False,
-
-    # Required for feedback button    
-    'github_issues': 'enabled',
-
+    # Required for feedback button
+    "github_issues": "enabled",
     # Inherit the author value
     "author": author,
-
     # The starter pack uses CC-BY-SA as the license
     #
     # TODO: If your docs need another license, specify it instead of 'CC-BY-SA'.
@@ -148,7 +144,6 @@ html_context = {
     #
     # TODO: If your documentation is a part of the code repository of your project,
     #       it inherits the code license instead; specify it instead of 'CC-BY-SA'.
-
     "license": {
         "name": "CC-BY-SA-3.0",
         "url": "https://github.com/canonical/sphinx-docs-starter-pack/blob/main/LICENSE",
@@ -190,7 +185,7 @@ html_baseurl = os.environ.get("READTHEDOCS_CANONICAL_URL", "/")
 
 # sphinx-sitemap uses html_baseurl to generate the full URL for each page:
 
-sitemap_url_scheme = '{link}'
+sitemap_url_scheme = "{link}"
 
 # Include `lastmod` dates in the sitemap:
 
@@ -199,9 +194,9 @@ sitemap_show_lastmod = True
 # Exclude generated pages from the sitemap:
 
 sitemap_excludes = [
-    '404/',
-    'genindex/',
-    'search/',
+    "404/",
+    "genindex/",
+    "search/",
 ]
 
 # TODO: Add more pages to sitemap_excludes if needed. Wildcards are supported.
@@ -211,7 +206,7 @@ sitemap_excludes = [
 # Template and asset locations #
 ################################
 
-# html_static_path = ["_static"]
+html_static_path = ["_static"]
 # templates_path = ["_templates"]
 
 
@@ -248,7 +243,7 @@ linkcheck_ignore = [
     r"https://.*\.sourceforge\.(net|io)/.*",
     # Root page returns 404 but this is expected
     "https://repo.packagist.org/",
-    ]
+]
 
 
 # A regex list of URLs where anchors are ignored by 'make linkcheck'
@@ -298,6 +293,7 @@ extensions = [
     "sphinx_last_updated_by_git",
     "sphinx.ext.intersphinx",
     "sphinx_sitemap",
+    "sphinxcontrib.mermaid",
 ]
 
 # Excludes files or directories from processing
@@ -308,9 +304,10 @@ exclude_patterns = [
 
 # Adds custom CSS files, located under 'html_static_path'
 
-# html_css_files = [
-#     "https://assets.ubuntu.com/v1/d86746ef-cookie_banner.css",
-# ]
+html_css_files = [
+    "mermaid-sequence.css",
+    #"https://assets.ubuntu.com/v1/d86746ef-cookie_banner.css",
+]
 
 
 # Adds custom JavaScript files, located under 'html_static_path'
@@ -369,8 +366,8 @@ if "discourse_prefix" not in html_context and "discourse" in html_context:
 
 # Workaround for substitutions.yaml
 
-if os.path.exists('./reuse/substitutions.yaml'):
-    with open('./reuse/substitutions.yaml', 'r') as fd:
+if os.path.exists("./reuse/substitutions.yaml"):
+    with open("./reuse/substitutions.yaml") as fd:
         myst_substitutions = yaml.safe_load(fd.read())
 
 # Add configuration for intersphinx mapping
