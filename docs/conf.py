@@ -145,8 +145,8 @@ html_context = {
     # TODO: If your documentation is a part of the code repository of your project,
     #       it inherits the code license instead; specify it instead of 'CC-BY-SA'.
     "license": {
-        "name": "CC-BY-SA-3.0",
-        "url": "https://github.com/canonical/sphinx-docs-starter-pack/blob/main/LICENSE",
+        "name": "CC-BY-SA-4.0",
+        "url": "https://github.com/canonical/mediawiki-k8s-operator/blob/main/LICENSE",
     },
 }
 

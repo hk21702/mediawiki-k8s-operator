@@ -1,7 +1,5 @@
 # MediaWiki K8s operator
 
-[![License][license-image]](LICENSE)
-
 A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/) deploying and managing MediaWiki on Kubernetes. [MediaWiki][mediawiki-site] is a free and open-source wiki software platform.
 
 For information about how to deploy, integrate, and manage this charm, see the Official [MediaWiki K8s charm documentation][charm-documentation-site].
@@ -76,5 +74,4 @@ MediaWiki and the MediaWiki logo are trademarks of the Wikimedia Foundation and 
 <!--Placeholder, update this when available-->
 
 [charm-documentation-site]: https://documentation.ubuntu.com
-[license-image]: https://img.shields.io/badge/License-Apache%202.0-blue.svg
 [mediawiki-site]: https://www.mediawiki.org
