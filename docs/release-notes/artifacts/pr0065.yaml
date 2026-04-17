@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Clarify licensing details in the documentation
+  author: hk21702
+  type: minor
+  description: Clarify licensing details in the documentation.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/65"
+  visibility: internal
+  highlight: false
