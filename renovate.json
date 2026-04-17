@@ -6,6 +6,15 @@
       "/^composer-?[a-z]*.json$/"
     ]
   },
+  "customDatasources": {
+    "charmhub": {
+      "defaultRegistryUrlTemplate": "https://api.charmhub.io/v2/charms/info/{{packageName}}?fields=channel-map",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": [{\"version\": $string($$.(`channel-map`[channel.risk = 'edge' and channel.track = '1.45' and channel.base.architecture = 'amd64' and channel.base.channel = '24.04'].revision.revision))}]}"
+      ]
+    }
+  },
   "customManagers": [
     {
       "customType": "regex",
@@ -57,6 +66,18 @@
       "matchStrings": [
         "git-sync-image:[\\s\\S]*?upstream-source:\\s*(?<depName>[^:]+):(?<currentValue>[^\\s@]*)(@(?<currentDigest>sha256:[0-9a-f]*))?"
       ]
+    },
+    {
+      "customType": "regex",
+      "datasourceTemplate": "custom.charmhub",
+      "fileMatch": [
+        "\\.tftest\\.hcl$",
+        "\\.tf$"
+      ],
+      "matchStrings": [
+        "# renovate: depName=\"(?<packageName>[^\"]+)\"\\s*\\n\\s*(?<fieldName>[a-zA-Z0-9_]+)\\s*=\\s*(?<currentValue>\\d+)"
+      ],
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "extends": [
@@ -71,6 +92,13 @@
         "github-tags"
       ],
       "pinDigests": true
+    },
+    {
+      "automerge": true,
+      "enabled": true,
+      "matchDatasources": [
+        "custom.charmhub"
+      ]
     },
     {
       "enabled": true,
