@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Prep CI for publishing charms to Charmhub
+  author: hk21702
+  type: minor
+  description: Prep CI for publishing charms to Charmhub.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/61"
+  visibility: internal
+  highlight: false
