@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Remove deprecated load test inputs from integration test workflow
+  author: hk21702
+  type: minor
+  description: The `load-test-*` inputs of the integration test workflow have been deprecated and thus removed. We need to remove them here as well for the workflow to be valid and function.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/60"
+  visibility: public
+  highlight: false
