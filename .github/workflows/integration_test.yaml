@@ -4,6 +4,7 @@ on:
   pull_request:
   schedule:
     - cron: "0 15 * * SAT"
+  merge_group:
 
 jobs:
   integration-tests-juju-3:

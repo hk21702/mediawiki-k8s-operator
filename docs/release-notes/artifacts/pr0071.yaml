@@ -1,0 +1,14 @@
+# Version of the artifact schema
+version_schema: 2
+
+# The key holding the change(s)
+changes:
+- title: Add merge_group triggers where reasonable
+  author: hk21702
+  type: minor
+  description: Add merge_group triggers where reasonable to workflows to allow the usage of a merge queue.
+  urls:
+    pr: 
+      - "https://github.com/canonical/mediawiki-k8s-operator/pull/71"
+  visibility: internal
+  highlight: false
