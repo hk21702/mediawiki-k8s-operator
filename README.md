@@ -1,5 +1,11 @@
 # MediaWiki K8s operator
 
+[![Charmhub Badge][charmhub-badge-image]][charmhub-site]
+[![Publish to edge][publish-charm-badge-image]][publish-charm-workflow]
+[![Promote charm][promote-charm-badge-image]][promote-charm-workflow]
+[![Charm documentation][charm-documentation-image]][charm-documentation-site]
+[![Allure report deployment][allure-report-image]][allure-report-site]
+
 A [Juju](https://juju.is/) [charm](https://documentation.ubuntu.com/juju/3.6/reference/charm/) deploying and managing MediaWiki on Kubernetes. [MediaWiki][mediawiki-site] is a free and open-source wiki software platform.
 
 For information about how to deploy, integrate, and manage this charm, see the Official [MediaWiki K8s charm documentation][charm-documentation-site].
@@ -26,20 +32,22 @@ This section could be structured in the following way:
 
 The following actions are available for the charm:
 
+- `rotate-mediawiki-secrets`
 - `rotate-root-credentials`
 - `update-database`
 
-<!-- Uncomment when pages are ready
-You can find more information about supported actions in [the Charmhub documentation](). <!--Link to the charm's actions documentation>
+You can find more information about supported actions in [the Charmhub documentation](https://charmhub.io/mediawiki-k8s/actions).
 
 The charm supports further customization, including:
 
-- [Installing additional extensions and skins]()
-- [Configuring MediaWiki]()
+- [Configuring MediaWiki](https://canonical-mediawiki-k8s-charm.readthedocs-hosted.com/how-to/configure-mediawiki/)
+- [Installing additional extensions and skins](https://canonical-mediawiki-k8s-charm.readthedocs-hosted.com/how-to/install-extensions-and-skins/)
+
+<!-- Uncomment when pages are ready
 - [Integrating with S3 object storage for file uploads]()
  -->
 
-For more information, refer to the [charm's documentation][charm-documentation-site]. <!--Link to primary RTD documentation-->
+For more information, refer to the [charm's documentation][charm-documentation-site].
 
 ## Integrations
 
@@ -52,11 +60,11 @@ juju deploy mysql-k8s --trust
 juju integrate mediawiki-k8s mysql-k8s:database
 ```
 
-Apart from this required integration, the charm can be integrated with other Juju charms and services as well. You can find the full list of integrations in [the Charmhub documentation][charm-documentation-site]. <!--Link to the charm's integration documentation-->
+Apart from this required integration, the charm can be integrated with other Juju charms and services as well. You can find the full list of integrations in [the Charmhub documentation](https://charmhub.io/mediawiki-k8s/integrations).
 
 ## Learn more
 
-- [Read more][charm-documentation-site] <!--Link to the charm's official documentation-->
+- [Read more][charm-documentation-site]
 - [Developer documentation](https://www.mediawiki.org/wiki/Developer_hub)
 - [Official webpage][mediawiki-site]
 
@@ -64,6 +72,7 @@ Apart from this required integration, the charm can be integrated with other Juj
 
 - [Issues](https://github.com/canonical/mediawiki-k8s-operator/issues)
 - [Contributing](CONTRIBUTING.md)
+- [Matrix](https://matrix.to/#/#charmhub-charmdev:ubuntu.com)
 
 ## Licensing and trademark
 
@@ -84,9 +93,16 @@ MediaWiki and the MediaWiki logo are trademarks of the Wikimedia Foundation and 
 
 For additional details, please refer to the [LICENSE](LICENSE).
 
-<!--Placeholder, update this when available-->
-
 [apache-2.0-site]: https://www.apache.org/licenses/LICENSE-2.0
 [cc-by-sa-4.0-site]: https://creativecommons.org/licenses/by-sa/4.0/
-[charm-documentation-site]: https://documentation.ubuntu.com
+[charmhub-badge-image]: https://charmhub.io/mediawiki-k8s/badge.svg
+[charmhub-site]: https://charmhub.io/mediawiki-k8s
+[publish-charm-badge-image]: https://github.com/canonical/mediawiki-k8s-operator/actions/workflows/publish_charm.yaml/badge.svg
+[publish-charm-workflow]: https://github.com/canonical/mediawiki-k8s-operator/actions/workflows/publish_charm.yaml
+[promote-charm-badge-image]: https://github.com/canonical/mediawiki-k8s-operator/actions/workflows/promote_charm.yaml/badge.svg
+[promote-charm-workflow]: https://github.com/canonical/mediawiki-k8s-operator/actions/workflows/promote_charm.yaml
+[charm-documentation-image]: https://img.shields.io/website?url=https%3A%2F%2Fcanonical-mediawiki-k8s-charm.readthedocs-hosted.com%2F&logo=readthedocs&label=Documentation
+[charm-documentation-site]: https://canonical-mediawiki-k8s-charm.readthedocs-hosted.com/
+[allure-report-image]: https://img.shields.io/github/deployments/canonical/mediawiki-k8s-operator/github-pages?label=Allure%20report
+[allure-report-site]: https://canonical.github.io/mediawiki-k8s-operator/
 [mediawiki-site]: https://www.mediawiki.org
